@@ -38,10 +38,20 @@
       <header class="topbar">
         <h1>Leseliste</h1>
         <div class="who">
-          <span id="user-email" class="muted"></span>
+          <div class="user-menu">
+            <button type="button" id="btn-user" class="user-btn" aria-expanded="false" aria-controls="user-menu">
+              <span id="user-email" class="user-email"></span><span aria-hidden="true">▾</span>
+            </button>
+            <ul id="user-menu" class="menu" hidden>
+              <li><a href="#/account/password">Passwort ändern</a></li>
+              <li><a href="#/account/delete" class="menu-danger">Konto löschen</a></li>
+            </ul>
+          </div>
           <button type="button" id="btn-logout">Abmelden</button>
         </div>
       </header>
+
+      <p id="home-notice" class="success" role="status" hidden></p>
 
       <form id="form-add" class="add-form">
         <label class="visually-hidden" for="add-url">Adresse des Artikels</label>
@@ -68,37 +78,42 @@
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
+    </section>
 
-      <details class="account-section">
-        <summary>Passwort ändern</summary>
-        <form id="form-password">
-          <label>Bisheriges Passwort
-            <input type="password" name="current" autocomplete="current-password" required>
-          </label>
-          <label>Neues Passwort
-            <input type="password" name="new" autocomplete="new-password" minlength="10" maxlength="256" required>
-          </label>
-          <label>Neues Passwort wiederholen
-            <input type="password" name="repeat" autocomplete="new-password" minlength="10" maxlength="256" required>
-          </label>
-          <p class="hint">Mindestens 10 Zeichen. Auf allen anderen Geräten wirst du abgemeldet.</p>
-          <p id="password-error" class="error" role="alert" hidden></p>
-          <p id="password-ok" class="success" role="status" hidden></p>
+    <section id="view-password" hidden>
+      <h1>Passwort ändern</h1>
+      <form id="form-password">
+        <label>Bisheriges Passwort
+          <input type="password" name="current" autocomplete="current-password" required>
+        </label>
+        <label>Neues Passwort
+          <input type="password" name="new" autocomplete="new-password" minlength="10" maxlength="256" required>
+        </label>
+        <label>Neues Passwort wiederholen
+          <input type="password" name="repeat" autocomplete="new-password" minlength="10" maxlength="256" required>
+        </label>
+        <p class="hint">Mindestens 10 Zeichen. Auf allen anderen Geräten wirst du abgemeldet.</p>
+        <p id="password-error" class="error" role="alert" hidden></p>
+        <div class="form-actions">
           <button type="submit" class="primary">Passwort ändern</button>
-        </form>
-      </details>
+          <a href="#/" class="button-link">Abbrechen</a>
+        </div>
+      </form>
+    </section>
 
-      <details class="danger">
-        <summary>Konto löschen</summary>
-        <form id="form-delete">
-          <p>Dabei werden dein Konto und alle gespeicherten Artikel und Schlagwörter unwiderruflich gelöscht.</p>
-          <label>Passwort zur Bestätigung
-            <input type="password" name="password" autocomplete="current-password" required>
-          </label>
-          <p id="delete-error" class="error" role="alert" hidden></p>
+    <section id="view-delete" hidden>
+      <h1>Konto löschen</h1>
+      <form id="form-delete">
+        <p>Dabei werden dein Konto und alle gespeicherten Artikel und Schlagwörter unwiderruflich gelöscht.</p>
+        <label>Passwort zur Bestätigung
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <p id="delete-error" class="error" role="alert" hidden></p>
+        <div class="form-actions">
           <button type="submit" class="danger-btn">Konto endgültig löschen</button>
-        </form>
-      </details>
+          <a href="#/" class="button-link">Abbrechen</a>
+        </div>
+      </form>
     </section>
 
     <section id="view-reader" hidden>

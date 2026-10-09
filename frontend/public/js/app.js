@@ -2,7 +2,7 @@ import { api, ApiError } from './api.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'auth', 'home', 'reader'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 
@@ -15,6 +15,7 @@ let listToken = 0; // verwirft veraltete Listenantworten
 let filter = { q: '', read: '', tag: '' };
 let tags = []; // Schlagwörter mit Anzahl
 let tagsStale = true;
+let pendingNotice = ''; // einmalige Meldung für die Liste (z. B. nach Passwortänderung)
 let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
 
@@ -88,6 +89,7 @@ function endSession() {
   filter = { q: '', read: '', tag: '' };
   tags = [];
   tagsStale = true;
+  pendingNotice = '';
   readerArticle = null;
   routeToken += 1;
   document.title = APP_TITLE;
@@ -144,11 +146,55 @@ $('btn-logout').addEventListener('click', async () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Benutzermenü und Kontoseiten (#/account/password, #/account/delete)
+// ---------------------------------------------------------------------------
+
+function closeMenu() {
+  $('user-menu').hidden = true;
+  $('btn-user').setAttribute('aria-expanded', 'false');
+}
+
+$('btn-user').addEventListener('click', () => {
+  const open = $('user-menu').hidden;
+  $('user-menu').hidden = !open;
+  $('btn-user').setAttribute('aria-expanded', String(open));
+});
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.user-menu')) closeMenu();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('user-menu').hidden) {
+    closeMenu();
+    $('btn-user').focus();
+  }
+});
+
+/** Zeigt eine Kontoseite mit leerem Formular. */
+function openAccountPage(name, title) {
+  routeToken += 1;
+  readerArticle = null;
+  document.title = `${title} – ${APP_TITLE}`;
+  const form = $(`form-${name}`);
+  form.reset();
+  clearError($(`${name}-error`));
+  show(name);
+  window.scrollTo(0, 0);
+  form.elements[0].focus();
+}
+
+/** Zurück zur Artikelliste, ohne die Kontoseite im Verlauf zu behalten. */
+function backToList(notice = '') {
+  pendingNotice = notice;
+  location.replace('#/');
+}
+
 $('form-password').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   clearError($('password-error'));
-  $('password-ok').hidden = true;
   const { current, new: next, repeat } = form.elements;
   if (next.value !== repeat.value) {
     showError($('password-error'), 'Die neuen Passwörter stimmen nicht überein.');
@@ -159,10 +205,9 @@ $('form-password').addEventListener('submit', async (event) => {
       api.changePassword(current.value, next.value),
     );
     form.reset();
-    $('password-ok').textContent = 'Das Passwort wurde geändert.';
-    $('password-ok').hidden = false;
+    backToList('Das Passwort wurde geändert.');
   } catch (error) {
-    showError($('password-error'), error.message);
+    if (!handleAuthError(error)) showError($('password-error'), error.message);
   }
 });
 
@@ -176,15 +221,15 @@ $('form-delete').addEventListener('submit', async (event) => {
       api.deleteAccount(form.elements.password.value),
     );
     form.reset();
-    form.closest('details').open = false;
     endSession();
   } catch (error) {
-    showError($('delete-error'), error.message);
+    if (!handleAuthError(error)) showError($('delete-error'), error.message);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Navigation (Adressleiste: "#/article/<id>" öffnet den Lesemodus)
+// Navigation (Adressleiste: "#/article/<id>" öffnet den Lesemodus,
+// "#/account/password" und "#/account/delete" die Kontoseiten)
 // ---------------------------------------------------------------------------
 
 function route() {
@@ -192,8 +237,11 @@ function route() {
     show('auth');
     return;
   }
+  closeMenu();
   const match = /^#\/article\/(\d+)$/.exec(location.hash);
   if (match) openReader(Number(match[1]));
+  else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
+  else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
   else openList();
 }
 
@@ -210,6 +258,10 @@ function openList() {
   $('user-email').textContent = currentUser.email;
   $('filter-q').value = filter.q;
   $('filter-read').value = filter.read;
+  const notice = $('home-notice');
+  notice.textContent = pendingNotice;
+  notice.hidden = !pendingNotice;
+  pendingNotice = '';
   show('home');
   if (tagsStale) loadTags();
   else renderTags();
