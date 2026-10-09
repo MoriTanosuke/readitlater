@@ -1,0 +1,28 @@
+{
+	admin off
+}
+
+# Standard: HTTP auf Port 80 (z. B. im Heimnetz oder hinter Tailscale).
+# Mit SITE_ADDRESS=meine-domain.example holt Caddy automatisch ein
+# HTTPS-Zertifikat (dann Port 80 und 443 freigeben, COOKIE_SECURE=true setzen).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy {$BACKEND_ADDR:backend:3000}
+	}
+
+	handle {
+		root * /srv
+		header Cache-Control "no-cache"
+		file_server
+	}
+}

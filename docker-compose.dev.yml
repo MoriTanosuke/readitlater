@@ -1,0 +1,12 @@
+# Lokaler Test: baut die Images aus dem Quellcode statt sie aus ghcr.io zu ziehen.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Danach erreichbar unter http://localhost:8080
+services:
+  backend:
+    build: ./backend
+    image: readitlater-backend:dev
+  web:
+    build: ./frontend
+    image: readitlater-web:dev
+  watchtower:
+    profiles: ["server-only"] # lokal nicht starten

@@ -1,0 +1,46 @@
+# Compose-Datei für den Server. Die Images baut GitHub Actions nach ghcr.io,
+# Watchtower holt neue Versionen automatisch.
+# Einmalig: .env aus .env.example anlegen (GITHUB_REPO setzen), dann `docker compose up -d`.
+name: readitlater
+
+services:
+  backend:
+    image: ghcr.io/${GITHUB_REPO:-owner/repo}-backend:latest
+    restart: unless-stopped
+    environment:
+      REGISTRATION_ENABLED: "${REGISTRATION_ENABLED:-true}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      RUST_LOG: "${RUST_LOG:-info}"
+    volumes:
+      - app-data:/data # hier liegt die SQLite-Datei
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  web:
+    image: ghcr.io/${GITHUB_REPO:-owner/repo}-web:latest
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    environment:
+      SITE_ADDRESS: "${SITE_ADDRESS:-:80}"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true" # nur Container mit dem Label oben aktualisieren
+      WATCHTOWER_POLL_INTERVAL: "300" # alle 5 Minuten prüfen
+      WATCHTOWER_CLEANUP: "true" # alte Images entfernen
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Nur nötig, wenn die Images in ghcr.io privat sind: vorher auf dem Server
+      # `docker login ghcr.io` ausführen (Token mit read:packages) und die Zeile aktivieren.
+      # - /root/.docker/config.json:/config.json:ro
+
+volumes:
+  app-data:

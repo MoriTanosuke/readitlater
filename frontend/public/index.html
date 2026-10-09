@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Leseliste</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <main id="app">
+
+    <section id="view-loading">
+      <p class="muted">Lade …</p>
+    </section>
+
+    <section id="view-auth" hidden>
+      <h1>Leseliste</h1>
+      <div class="tabs" role="tablist" aria-label="Anmelden oder registrieren">
+        <button type="button" role="tab" id="tab-login" aria-selected="true">Anmelden</button>
+        <button type="button" role="tab" id="tab-register" aria-selected="false">Registrieren</button>
+      </div>
+      <form id="form-auth">
+        <label>E-Mail
+          <input type="email" name="email" autocomplete="username" required>
+        </label>
+        <label>Passwort
+          <input type="password" name="password" autocomplete="current-password" minlength="10" required>
+        </label>
+        <p id="auth-hint" class="hint" hidden>Mindestens 10 Zeichen.</p>
+        <p id="auth-error" class="error" role="alert" hidden></p>
+        <button type="submit" id="auth-submit" class="primary">Anmelden</button>
+      </form>
+    </section>
+
+    <section id="view-home" hidden>
+      <header class="topbar">
+        <h1>Leseliste</h1>
+        <div class="who">
+          <span id="user-email" class="muted"></span>
+          <button type="button" id="btn-logout">Abmelden</button>
+        </div>
+      </header>
+
+      <p class="empty">Noch keine Artikel. Das Speichern per URL kommt im nächsten Schritt.</p>
+
+      <details class="danger">
+        <summary>Konto löschen</summary>
+        <form id="form-delete">
+          <p>Dabei werden dein Konto und alle gespeicherten Artikel und Schlagwörter unwiderruflich gelöscht.</p>
+          <label>Passwort zur Bestätigung
+            <input type="password" name="password" autocomplete="current-password" required>
+          </label>
+          <p id="delete-error" class="error" role="alert" hidden></p>
+          <button type="submit" class="danger-btn">Konto endgültig löschen</button>
+        </form>
+      </details>
+    </section>
+
+  </main>
+</body>
+</html>
