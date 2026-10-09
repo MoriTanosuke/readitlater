@@ -5,7 +5,7 @@ Artikel per URL speichern, Volltext durchsuchen, mit Schlagwörtern versehen und
 ## Stack
 
 - **Backend** (`/backend`): Rust, axum, tokio, sqlx (SQLite, eingebettete Migrationen), argon2, eigene Session-Verwaltung
-- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module), keine Buildchain, kein npm. Der Frontend-Code (`/frontend/public`) bleibt statisch: keine npm-Pakete, keine Buildchain, kein Transpiler oder Bundler. Npm ist nur für Testwerkzeuge in `/frontend/tests` erlaubt (siehe Entscheidung „Tests“), sie gehören nie in die Images.
+- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module). Der Code bleibt statisch: keine npm-Pakete, keine Buildchain, kein Transpiler oder Bundler. Npm ist nur für Testwerkzeuge in `/frontend/tests` erlaubt (siehe Entscheidung „Tests“), sie gehören nie in die Images.
 - **Auslieferung**: Caddy (`/frontend/Caddyfile`) liefert das Frontend aus und leitet `/api/*` ans Backend. Dadurch gibt es nur eine Origin und kein CORS.
 - **Deployment**: GitHub Actions baut zwei Images nach ghcr.io (`<repo>-backend`, `<repo>-web`), Watchtower (Fork `nicholas-fedor/watchtower`) zieht sie auf dem Server. Der Push auf `main` deployt automatisch.
 - **Daten**: SQLite im WAL-Modus, Datei liegt im Volume `/data`, nie im Image.
