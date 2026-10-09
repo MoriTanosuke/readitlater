@@ -49,7 +49,17 @@ export const api = {
       new_password: newPassword,
     }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
-  listArticles: (limit, offset) => request('GET', `/articles?limit=${limit}&offset=${offset}`),
+  /** filter: { q, read ('true' | 'false' | ''), tag } */
+  listArticles: (limit, offset, filter = {}) => {
+    const params = new URLSearchParams({ limit, offset });
+    if (filter.q) params.set('q', filter.q);
+    if (filter.read) params.set('read', filter.read);
+    if (filter.tag) params.set('tag', filter.tag);
+    return request('GET', `/articles?${params}`);
+  },
+  listTags: () => request('GET', '/tags'),
+  /** changes: { is_read?, tags? } */
+  updateArticle: (id, changes) => request('PATCH', `/articles/${encodeURIComponent(id)}`, changes),
   addArticle: (url) => request('POST', '/articles', { url }),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
   deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),

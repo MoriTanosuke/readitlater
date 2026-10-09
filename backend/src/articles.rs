@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::SqliteConnection;
 use url::Url;
 
 use crate::{
@@ -14,11 +15,14 @@ use crate::{
     error::{ApiError, ApiJson},
     extract::{self, ExtractError},
     fetch::FetchError,
+    tags,
 };
 
 const MAX_URL_LEN: usize = 2048;
 const DEFAULT_LIMIT: i64 = 50;
 const MAX_LIMIT: i64 = 200;
+const MAX_QUERY_LEN: usize = 200;
+const MAX_QUERY_WORDS: usize = 10;
 
 #[derive(Deserialize)]
 pub struct NewArticle {
@@ -29,21 +33,39 @@ pub struct NewArticle {
 pub struct ListParams {
     limit: Option<i64>,
     offset: Option<i64>,
+    /// Suchtext (Volltext über Titel und Artikeltext).
+    q: Option<String>,
+    /// Nur Artikel mit diesem Schlagwort.
+    tag: Option<String>,
+    /// `true` = nur gelesene, `false` = nur ungelesene Artikel.
+    read: Option<bool>,
+}
+
+/// Teilweise Änderung eines Artikels: Gelesen-Status und/oder Schlagwörter
+/// (die Liste ersetzt die bisherigen Schlagwörter vollständig).
+#[derive(Deserialize)]
+pub struct ArticlePatch {
+    is_read: Option<bool>,
+    tags: Option<Vec<String>>,
 }
 
 /// Kurzform für die Liste (ohne den vollen Text).
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct ArticleSummary {
     id: i64,
     url: String,
     title: String,
     excerpt: String,
+    /// Nur bei einer Suche: Textauszug, Treffer stehen zwischen \u{1} und \u{2}.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    snippet: Option<String>,
     is_read: bool,
     created_at: String,
+    tags: Vec<String>,
 }
 
 /// Einzelner Artikel mit bereinigtem HTML-Inhalt.
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct ArticleFull {
     id: i64,
     url: String,
@@ -52,6 +74,66 @@ pub struct ArticleFull {
     content: String,
     is_read: bool,
     created_at: String,
+    tags: Vec<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct SummaryRow {
+    id: i64,
+    url: String,
+    title: String,
+    excerpt: String,
+    snippet: Option<String>,
+    is_read: bool,
+    created_at: String,
+    tags: String,
+}
+
+impl From<SummaryRow> for ArticleSummary {
+    fn from(row: SummaryRow) -> Self {
+        Self {
+            id: row.id,
+            url: row.url,
+            title: row.title,
+            excerpt: row.excerpt,
+            snippet: row.snippet.filter(|s| !s.is_empty()),
+            is_read: row.is_read,
+            created_at: row.created_at,
+            tags: parse_tags(&row.tags),
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct FullRow {
+    id: i64,
+    url: String,
+    title: String,
+    excerpt: String,
+    content: String,
+    is_read: bool,
+    created_at: String,
+    tags: String,
+}
+
+impl From<FullRow> for ArticleFull {
+    fn from(row: FullRow) -> Self {
+        Self {
+            id: row.id,
+            url: row.url,
+            title: row.title,
+            excerpt: row.excerpt,
+            content: row.content,
+            is_read: row.is_read,
+            created_at: row.created_at,
+            tags: parse_tags(&row.tags),
+        }
+    }
+}
+
+/// Schlagwörter kommen aus SQLite als JSON-Array (`json_group_array`).
+fn parse_tags(json: &str) -> Vec<String> {
+    serde_json::from_str(json).unwrap_or_default()
 }
 
 /// `POST /api/articles`: Seite laden, Hauptinhalt extrahieren und speichern.
@@ -90,10 +172,10 @@ pub async fn create(
         .map_err(ApiError::internal)?
         .map_err(extract_error)?;
 
-    let inserted = sqlx::query_as::<_, ArticleSummary>(
+    let inserted = sqlx::query_as::<_, SummaryRow>(
         "INSERT INTO articles (user_id, url, title, content, content_text, excerpt) \
          VALUES (?, ?, ?, ?, ?, ?) \
-         RETURNING id, url, title, excerpt, is_read, created_at",
+         RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags",
     )
     .bind(user.id)
     .bind(&normalized)
@@ -105,14 +187,15 @@ pub async fn create(
     .await;
 
     match inserted {
-        Ok(article) => Ok((StatusCode::CREATED, Json(article))),
+        Ok(row) => Ok((StatusCode::CREATED, Json(row.into()))),
         // Zwei gleichzeitige Anfragen für dieselbe Adresse.
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(already_saved()),
         Err(e) => Err(e.into()),
     }
 }
 
-/// `GET /api/articles?limit=&offset=`: eigene Artikel, neueste zuerst.
+/// `GET /api/articles?q=&tag=&read=&limit=&offset=`: eigene Artikel.
+/// Ohne Suchtext neueste zuerst, mit Suchtext nach Relevanz.
 pub async fn list(
     State(state): State<AppState>,
     user: AuthUser,
@@ -120,16 +203,96 @@ pub async fn list(
 ) -> Result<Json<Vec<ArticleSummary>>, ApiError> {
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let offset = params.offset.unwrap_or(0).max(0);
-    let articles = sqlx::query_as::<_, ArticleSummary>(
-        "SELECT id, url, title, excerpt, is_read, created_at FROM articles \
-         WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
-    )
-    .bind(user.id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
-    Ok(Json(articles))
+    let tag = params
+        .tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let read = params.read;
+
+    let rows = match search_query(params.q.as_deref())? {
+        Some(fts) => {
+            // Die Spalte tags liefert die Schlagwörter sortiert als JSON-Array.
+            sqlx::query_as::<_, SummaryRow>(
+                "SELECT a.id, a.url, a.title, a.excerpt, \
+                        snippet(articles_fts, 1, char(1), char(2), '…', 24) AS snippet, \
+                        a.is_read, a.created_at, \
+                        (SELECT json_group_array(name) FROM ( \
+                            SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
+                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                 FROM articles_fts \
+                 JOIN articles a ON a.id = articles_fts.rowid \
+                 WHERE articles_fts MATCH ?1 AND a.user_id = ?2 \
+                   AND (?3 IS NULL OR a.is_read = ?3) \
+                   AND (?4 IS NULL OR EXISTS (SELECT 1 FROM article_tags at \
+                        JOIN tags t ON t.id = at.tag_id \
+                        WHERE at.article_id = a.id AND t.name = ?4)) \
+                 ORDER BY articles_fts.rank, a.id DESC LIMIT ?5 OFFSET ?6",
+            )
+            .bind(fts)
+            .bind(user.id)
+            .bind(read)
+            .bind(tag)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.pool)
+            .await?
+        }
+        None => {
+            sqlx::query_as::<_, SummaryRow>(
+                "SELECT a.id, a.url, a.title, a.excerpt, NULL AS snippet, \
+                        a.is_read, a.created_at, \
+                        (SELECT json_group_array(name) FROM ( \
+                            SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
+                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                 FROM articles a \
+                 WHERE a.user_id = ?1 \
+                   AND (?2 IS NULL OR a.is_read = ?2) \
+                   AND (?3 IS NULL OR EXISTS (SELECT 1 FROM article_tags at \
+                        JOIN tags t ON t.id = at.tag_id \
+                        WHERE at.article_id = a.id AND t.name = ?3)) \
+                 ORDER BY a.id DESC LIMIT ?4 OFFSET ?5",
+            )
+            .bind(user.id)
+            .bind(read)
+            .bind(tag)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.pool)
+            .await?
+        }
+    };
+    Ok(Json(rows.into_iter().map(Into::into).collect()))
+}
+
+/// Macht aus dem Suchtext eine sichere FTS5-Abfrage: Jedes Wort wird als Phrase
+/// in Anführungszeichen gesetzt (keine FTS-Operatoren von außen), das letzte Wort
+/// matcht als Präfix („rust“ findet auch „rustacean“). Alle Wörter müssen vorkommen.
+/// `None`, wenn kein Suchtext angegeben ist.
+fn search_query(input: Option<&str>) -> Result<Option<String>, ApiError> {
+    let Some(input) = input.map(str::trim).filter(|q| !q.is_empty()) else {
+        return Ok(None);
+    };
+    if input.chars().count() > MAX_QUERY_LEN {
+        return Err(ApiError::BadRequest(format!(
+            "Der Suchtext darf höchstens {MAX_QUERY_LEN} Zeichen lang sein"
+        )));
+    }
+    let words: Vec<&str> = input.split_whitespace().take(MAX_QUERY_WORDS).collect();
+    let last = words.len() - 1;
+    let parts: Vec<String> = words
+        .iter()
+        .enumerate()
+        .map(|(i, word)| {
+            let quoted = word.replace('"', "\"\"");
+            if i == last {
+                format!("\"{quoted}\"*")
+            } else {
+                format!("\"{quoted}\"")
+            }
+        })
+        .collect();
+    Ok(Some(parts.join(" ")))
 }
 
 /// `GET /api/articles/{id}`: ein eigener Artikel mit Inhalt.
@@ -138,15 +301,71 @@ pub async fn show(
     user: AuthUser,
     Path(id): Path<i64>,
 ) -> Result<Json<ArticleFull>, ApiError> {
-    let article = sqlx::query_as::<_, ArticleFull>(
-        "SELECT id, url, title, excerpt, content, is_read, created_at FROM articles \
-         WHERE id = ? AND user_id = ?",
+    let article = sqlx::query_as::<_, FullRow>(
+        "SELECT a.id, a.url, a.title, a.excerpt, a.content, a.is_read, a.created_at, \
+                (SELECT json_group_array(name) FROM ( \
+                    SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
+                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+         FROM articles a WHERE a.id = ? AND a.user_id = ?",
     )
     .bind(id)
     .bind(user.id)
     .fetch_optional(&state.pool)
     .await?;
-    article.map(Json).ok_or_else(not_found)
+    article.map(|row| Json(row.into())).ok_or_else(not_found)
+}
+
+/// `PATCH /api/articles/{id}`: Gelesen-Status und/oder Schlagwörter ändern.
+pub async fn update(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<i64>,
+    ApiJson(patch): ApiJson<ArticlePatch>,
+) -> Result<Json<ArticleSummary>, ApiError> {
+    let new_tags = patch.tags.as_deref().map(tags::normalize).transpose()?;
+
+    let mut tx = state.pool.begin().await?;
+    let owned: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM articles WHERE id = ? AND user_id = ?")
+            .bind(id)
+            .bind(user.id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if owned.is_none() {
+        return Err(not_found());
+    }
+    if let Some(is_read) = patch.is_read {
+        sqlx::query("UPDATE articles SET is_read = ? WHERE id = ?")
+            .bind(is_read)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(names) = new_tags {
+        tags::replace(&mut tx, user.id, id, &names).await?;
+    }
+    let article = load_summary(&mut tx, user.id, id).await?;
+    tx.commit().await?;
+    Ok(Json(article))
+}
+
+async fn load_summary(
+    conn: &mut SqliteConnection,
+    user_id: i64,
+    id: i64,
+) -> Result<ArticleSummary, ApiError> {
+    let row = sqlx::query_as::<_, SummaryRow>(
+        "SELECT a.id, a.url, a.title, a.excerpt, NULL AS snippet, a.is_read, a.created_at, \
+                (SELECT json_group_array(name) FROM ( \
+                    SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
+                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+         FROM articles a WHERE a.id = ? AND a.user_id = ?",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(conn)
+    .await?;
+    row.map(Into::into).ok_or_else(not_found)
 }
 
 /// `DELETE /api/articles/{id}`: eigenen Artikel löschen (Schlagwort-Zuordnungen per CASCADE).

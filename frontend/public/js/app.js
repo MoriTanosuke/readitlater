@@ -11,6 +11,10 @@ let currentUser = null;
 let articles = []; // bereits geladene Artikel der Liste
 let hasMore = false;
 let listLoaded = false;
+let listToken = 0; // verwirft veraltete Listenantworten
+let filter = { q: '', read: '', tag: '' };
+let tags = []; // Schlagwörter mit Anzahl
+let tagsStale = true;
 let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
 
@@ -80,6 +84,10 @@ function endSession() {
   articles = [];
   hasMore = false;
   listLoaded = false;
+  listToken += 1;
+  filter = { q: '', read: '', tag: '' };
+  tags = [];
+  tagsStale = true;
   readerArticle = null;
   routeToken += 1;
   document.title = APP_TITLE;
@@ -120,6 +128,7 @@ $('form-auth').addEventListener('submit', async (event) => {
     currentUser = user;
     articles = [];
     listLoaded = false;
+    tagsStale = true;
     resetHash();
     route();
   } catch (error) {
@@ -199,52 +208,196 @@ function openList() {
   readerArticle = null;
   document.title = APP_TITLE;
   $('user-email').textContent = currentUser.email;
+  $('filter-q').value = filter.q;
+  $('filter-read').value = filter.read;
   show('home');
+  if (tagsStale) loadTags();
+  else renderTags();
   if (!listLoaded) loadArticles(true);
   else renderList();
 }
 
+function filterActive() {
+  return Boolean(filter.q || filter.read || filter.tag);
+}
+
 async function loadArticles(reset) {
   clearError($('list-error'));
+  const token = ++listToken;
   const offset = reset ? 0 : articles.length;
   try {
-    const page = await api.listArticles(PAGE_SIZE, offset);
+    const page = await api.listArticles(PAGE_SIZE, offset, filter);
+    if (token !== listToken) return; // Filter wurde inzwischen geändert
     articles = reset ? page : articles.concat(page);
     hasMore = page.length === PAGE_SIZE;
     listLoaded = true;
     renderList();
   } catch (error) {
+    if (token !== listToken) return;
     if (handleAuthError(error)) return;
     showError($('list-error'), error.message);
   }
 }
 
+async function loadTags() {
+  try {
+    tags = await api.listTags();
+    tagsStale = false;
+    // Ein Schlagwort, das es nicht mehr gibt, bleibt nicht als Filter hängen.
+    if (filter.tag && !tags.some((t) => t.name.toLowerCase() === filter.tag.toLowerCase())) {
+      filter.tag = '';
+      loadArticles(true);
+    }
+    renderTags();
+  } catch (error) {
+    handleAuthError(error); // andere Fehler: die Liste funktioniert auch ohne Leiste
+  }
+}
+
+function renderTags() {
+  const bar = $('tag-bar');
+  bar.hidden = tags.length === 0;
+  bar.replaceChildren(
+    ...tags.map(({ name, count }) => {
+      const chip = element('button', 'tag-chip', name);
+      chip.type = 'button';
+      chip.append(element('span', 'tag-count', String(count)));
+      const active = name.toLowerCase() === filter.tag.toLowerCase();
+      chip.setAttribute('aria-pressed', String(active));
+      chip.addEventListener('click', () => {
+        filter.tag = active ? '' : name;
+        applyFilter();
+      });
+      return chip;
+    }),
+  );
+}
+
+/** Lädt die Liste mit dem aktuellen Filter neu. */
+function applyFilter() {
+  renderTags();
+  articles = [];
+  hasMore = false;
+  listLoaded = false;
+  renderList();
+  loadArticles(true);
+}
+
+let searchTimer = 0;
+$('form-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  clearTimeout(searchTimer);
+  filter.q = $('filter-q').value.trim();
+  applyFilter();
+});
+$('filter-q').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const q = $('filter-q').value.trim();
+    if (q === filter.q) return;
+    filter.q = q;
+    applyFilter();
+  }, 300);
+});
+$('filter-read').addEventListener('change', () => {
+  filter.read = $('filter-read').value;
+  applyFilter();
+});
+
 function renderList() {
   $('article-list').replaceChildren(...articles.map(articleItem));
-  $('list-empty').hidden = articles.length > 0 || !listLoaded;
+  const empty = $('list-empty');
+  empty.textContent = filterActive()
+    ? 'Keine passenden Artikel gefunden.'
+    : 'Noch keine Artikel. Füge oben eine Adresse ein.';
+  empty.hidden = articles.length > 0 || !listLoaded;
   $('btn-more').hidden = !hasMore;
 }
 
+/** Suchauszug anzeigen: Treffer stehen zwischen \u0001 und \u0002 und werden als <mark> gesetzt. */
+function snippetNodes(snippet) {
+  const nodes = [];
+  snippet.split('\u0001').forEach((part, index) => {
+    if (index === 0) {
+      nodes.push(part);
+      return;
+    }
+    const [hit, rest = ''] = part.split('\u0002');
+    nodes.push(element('mark', '', hit), rest);
+  });
+  return nodes;
+}
+
 function articleItem(article) {
-  const item = element('li', 'article');
+  const item = element('li', article.is_read ? 'article is-read' : 'article');
+
+  const excerpt = element('span', 'article-excerpt');
+  if (article.snippet) excerpt.append(...snippetNodes(article.snippet));
+  else excerpt.textContent = article.excerpt;
 
   const link = element('a', 'article-main');
   link.href = `#/article/${article.id}`;
   link.append(
     element('span', 'article-title', article.title),
     element('span', 'article-meta', `${hostOf(article.url)} · ${formatDate(article.created_at)}`),
-    element('span', 'article-excerpt', article.excerpt),
+    excerpt,
   );
+  if (article.tags.length > 0) {
+    link.append(element('span', 'article-tags', article.tags.map((t) => `#${t}`).join(' ')));
+  }
 
-  const remove = element('button', 'icon-btn', 'Löschen');
+  const toggle = element('button', 'icon-btn toggle', article.is_read ? 'Ungelesen' : 'Gelesen');
+  toggle.type = 'button';
+  toggle.setAttribute(
+    'aria-label',
+    `${article.is_read ? 'Als ungelesen' : 'Als gelesen'} markieren: ${article.title}`,
+  );
+  toggle.addEventListener('click', () => toggleRead(article, toggle));
+
+  const remove = element('button', 'icon-btn delete', 'Löschen');
   remove.type = 'button';
   remove.setAttribute('aria-label', `Artikel löschen: ${article.title}`);
   remove.addEventListener('click', async () => {
     if (await removeArticle(article.id, article.title)) renderList();
   });
 
-  item.append(link, remove);
+  const actions = element('div', 'article-actions');
+  actions.append(toggle, remove);
+  item.append(link, actions);
   return item;
+}
+
+/** Ändert den Gelesen-Status und übernimmt die Antwort in die geladene Liste. */
+async function setRead(article, isRead) {
+  const updated = await api.updateArticle(article.id, { is_read: isRead });
+  mergeUpdated(updated);
+  return updated;
+}
+
+function mergeUpdated(updated) {
+  const index = articles.findIndex((a) => a.id === updated.id);
+  if (index === -1) return;
+  const wanted = filter.read === '' ? null : filter.read === 'true';
+  if (wanted !== null && updated.is_read !== wanted) {
+    articles.splice(index, 1); // passt nicht mehr zum Filter
+  } else {
+    articles[index] = { ...articles[index], ...updated, snippet: articles[index].snippet };
+  }
+}
+
+async function toggleRead(article, button) {
+  try {
+    await withBusy(button, () => setRead(article, !article.is_read));
+    renderList();
+  } catch (error) {
+    if (handleAuthError(error)) return;
+    if (error instanceof ApiError && error.status === 404) {
+      articles = articles.filter((a) => a.id !== article.id);
+      renderList();
+      return;
+    }
+    showError($('list-error'), error.message);
+  }
 }
 
 /** Fragt nach, löscht den Artikel und entfernt ihn aus der Liste. Gibt zurück, ob er weg ist. */
@@ -260,6 +413,8 @@ async function removeArticle(id, title) {
     }
   }
   articles = articles.filter((a) => a.id !== id);
+  tagsStale = true;
+  if (!$('view-home').hidden) loadTags();
   return true;
 }
 
@@ -275,9 +430,17 @@ $('form-add').addEventListener('submit', async (event) => {
   input.readOnly = true;
   try {
     const article = await withBusy($('add-submit'), () => api.addArticle(url));
-    articles.unshift(article);
     input.value = '';
-    renderList();
+    if (filterActive()) {
+      // Der neue Artikel passt vielleicht nicht zum Filter: Filter zurücksetzen.
+      filter = { q: '', read: '', tag: '' };
+      $('filter-q').value = '';
+      $('filter-read').value = '';
+      applyFilter();
+    } else {
+      articles.unshift(article);
+      renderList();
+    }
   } catch (error) {
     if (!handleAuthError(error)) showError($('add-error'), error.message);
   } finally {
@@ -301,7 +464,10 @@ async function openReader(id) {
   $('reader-meta').replaceChildren();
   $('reader-content').replaceChildren();
   $('reader-delete').hidden = true;
+  $('reader-toggle-read').hidden = true;
+  $('form-tags').hidden = true;
   clearError($('reader-error'));
+  clearError($('tags-error'));
 
   try {
     const article = await api.getArticle(id);
@@ -325,12 +491,56 @@ async function openReader(id) {
 
     renderSafeHtml($('reader-content'), article.content, article.url);
     $('reader-delete').hidden = false;
+    updateReaderControls();
+    $('form-tags').hidden = false;
   } catch (error) {
     if (token !== routeToken) return;
     if (handleAuthError(error)) return;
     showError($('reader-error'), error.message);
   }
 }
+
+function updateReaderControls() {
+  const button = $('reader-toggle-read');
+  button.textContent = readerArticle.is_read ? 'Als ungelesen markieren' : 'Als gelesen markieren';
+  button.hidden = false;
+  $('tags-input').value = readerArticle.tags.join(', ');
+}
+
+/** Übernimmt die Antwort des Backends für den geöffneten Artikel. */
+function applyReaderUpdate(updated) {
+  readerArticle = { ...readerArticle, is_read: updated.is_read, tags: updated.tags };
+  mergeUpdated(updated);
+  tagsStale = true;
+  if (filterActive()) listLoaded = false; // Liste beim Zurückgehen neu laden
+  updateReaderControls();
+}
+
+async function patchReader(changes, button, errorElement) {
+  if (!readerArticle) return;
+  const token = routeToken;
+  clearError(errorElement);
+  try {
+    const updated = await withBusy(button, () => api.updateArticle(readerArticle.id, changes));
+    if (token !== routeToken) return;
+    applyReaderUpdate(updated);
+  } catch (error) {
+    if (token !== routeToken || handleAuthError(error)) return;
+    showError(errorElement, error.message);
+  }
+}
+
+$('reader-toggle-read').addEventListener('click', () => {
+  if (readerArticle) {
+    patchReader({ is_read: !readerArticle.is_read }, $('reader-toggle-read'), $('tags-error'));
+  }
+});
+
+$('form-tags').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const names = $('tags-input').value.split(',').map((t) => t.trim()).filter(Boolean);
+  patchReader({ tags: names }, $('tags-submit'), $('tags-error'));
+});
 
 $('reader-delete').addEventListener('click', async () => {
   if (!readerArticle) return;

@@ -52,6 +52,18 @@
       <p id="add-status" class="muted" role="status" hidden></p>
       <p id="add-error" class="error" role="alert" hidden></p>
 
+      <form id="form-filter" class="filter" role="search">
+        <label class="visually-hidden" for="filter-q">Artikel durchsuchen</label>
+        <input id="filter-q" type="search" maxlength="200" autocomplete="off" placeholder="Volltext durchsuchen …">
+        <label class="visually-hidden" for="filter-read">Status</label>
+        <select id="filter-read">
+          <option value="">Alle</option>
+          <option value="false">Ungelesen</option>
+          <option value="true">Gelesen</option>
+        </select>
+      </form>
+      <div id="tag-bar" class="tag-bar" role="group" aria-label="Nach Schlagwort filtern" hidden></div>
+
       <ul id="article-list" class="article-list"></ul>
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
@@ -92,11 +104,21 @@
     <section id="view-reader" hidden>
       <nav class="reader-nav">
         <a href="#/" id="reader-back">← Zur Liste</a>
-        <button type="button" id="reader-delete" class="danger-btn" hidden>Artikel löschen</button>
+        <div class="reader-actions">
+          <button type="button" id="reader-toggle-read" hidden></button>
+          <button type="button" id="reader-delete" class="danger-btn" hidden>Löschen</button>
+        </div>
       </nav>
       <article>
         <h1 id="reader-title"></h1>
         <p id="reader-meta" class="muted"></p>
+        <form id="form-tags" class="add-form tags-form" hidden>
+          <label>Schlagwörter (mit Komma getrennt)
+            <input id="tags-input" name="tags" type="text" maxlength="900" autocomplete="off" placeholder="z. B. rust, webentwicklung">
+          </label>
+          <button type="submit" id="tags-submit">Speichern</button>
+        </form>
+        <p id="tags-error" class="error" role="alert" hidden></p>
         <p id="reader-error" class="error" role="alert" hidden></p>
         <div id="reader-content" class="prose"></div>
       </article>

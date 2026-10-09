@@ -37,6 +37,8 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 - **Passwörter**: argon2id (Standardparameter), mindestens 10 Zeichen. Login prüft auch bei unbekannter E-Mail einen Hash und gibt immer dieselbe Fehlermeldung zurück.
 - **CSRF**: Alle Anfragen außer GET/HEAD/OPTIONS brauchen den Header `X-Requested-With`. Das Frontend setzt ihn in `js/api.js`.
 - **Passwort ändern**: `PUT /api/account/password` mit bisherigem und neuem Passwort (gleiche Regeln wie bei der Registrierung). Danach werden alle Sessions des Benutzers gelöscht und für das aktuelle Gerät wird eine neue angelegt.
+- **Suche**: SQLite FTS5 (Migration 0003) als External-Content-Index `articles_fts` über `title` und `content_text`, per Trigger für Insert, Update und Delete aktuell. Tokenizer `unicode61 remove_diacritics 2` (Umlaute werden gefaltet). Der Suchtext wird nie roh an FTS5 gegeben: jedes Wort wird als Phrase in Anführungszeichen gesetzt, das letzte als Präfix, alle müssen vorkommen (`search_query` in `articles.rs`). Sortierung nach Relevanz (bm25), Treffer im Auszug stehen zwischen den Steuerzeichen U+0001 und U+0002 und werden im Frontend per DOM als `<mark>` gesetzt.
+- **Schlagwörter und Gelesen-Status**: `PATCH /api/articles/{id}` mit `is_read` und/oder `tags` (Liste ersetzt die bisherigen). Schlagwörter sind pro Benutzer, ohne Beachtung der Groß-/Kleinschreibung eindeutig, max. 40 Zeichen, max. 20 pro Artikel, keine Kommas. Nicht mehr verwendete Schlagwörter werden automatisch gelöscht. `GET /api/tags` liefert Name und Anzahl, `GET /api/articles` filtert mit `q`, `tag` und `read`.
 - **Konto löschen**: erfordert das Passwort. Artikel, Schlagwörter und Sessions verschwinden per `ON DELETE CASCADE` (Fremdschlüssel sind pro Verbindung aktiviert, siehe `db.rs`).
 - **Registrierung**: per `REGISTRATION_ENABLED=false` abschaltbar.
 - **Artikel abrufen (SSRF-Schutz)**: nur http/https ohne Zugangsdaten; ein eigener DNS-Resolver (`PublicOnlyResolver` in `fetch.rs`) liefert nur öffentliche IPs, das gilt damit auch für Redirects (max. 5, jeder Hop wird geprüft) und gegen DNS-Rebinding. Kein Proxy, Gesamt-Timeout, Größenlimit auf die entpackten Bytes (Gzip-Bomben), nur HTML, gleichzeitige Abrufe begrenzt (sonst 429). Duplikate (pro Benutzer, ohne Fragment) liefern 409 ohne erneuten Abruf.
@@ -49,6 +51,6 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 
 1. Fertig: Grundgerüst, Migration 0001, Registrierung, Login, Logout, Konto löschen, Caddy, Dockerfiles, Compose, Workflow, Integrationstests
 2. Fertig: Artikel speichern (URL laden, Hauptinhalt extrahieren, SSRF-Schutz mit Blockierung von localhost und privaten IP-Bereichen auch nach Redirects, Timeout, Größenlimit), Artikel löschen
-3. Offen: Schlagwörter, Gelesen-Status, Suche mit SQLite FTS5 (Trigger für Insert, Update, Delete)
-4. Teilweise: Liste, Lesemodus und Bereinigung mit `ammonia` fertig; offen: Suche, Schlagwörter und Gelesen-Status im Frontend
+3. Fertig: Schlagwörter, Gelesen-Status, Suche mit SQLite FTS5 (Trigger für Insert, Update, Delete)
+4. Fertig: Liste, Lesemodus, Suche, Filter (gelesen, Schlagwort), Schlagwörter bearbeiten, mobil optimiert, Bereinigung mit `ammonia`. Noch offen: Schlagwörter umbenennen/global löschen, Import/Export
 5. Offen: Ratenbegrenzung für Login und Registrierung, bevor der Server aus dem Internet erreichbar ist
