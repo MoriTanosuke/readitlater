@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use readlater_backend::{AppState, app, auth, config::Config, db};
 use tokio::{
@@ -37,9 +37,12 @@ async fn main() {
         }
     };
 
-    let state = AppState {
-        pool,
-        config: Arc::new(config),
+    let state = match AppState::new(pool, config) {
+        Ok(state) => state,
+        Err(e) => {
+            tracing::error!("HTTP-Client konnte nicht erstellt werden: {e}");
+            std::process::exit(1);
+        }
     };
 
     // Abgelaufene Sessions stündlich entfernen.

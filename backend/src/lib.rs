@@ -1,11 +1,14 @@
 //! Backend der Read-it-later-App.
 
+pub mod articles;
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod extract;
+pub mod fetch;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
@@ -16,13 +19,34 @@ use axum::{
     routing::{delete, get, post},
 };
 use sqlx::SqlitePool;
+use tokio::sync::Semaphore;
 
-use crate::{config::Config, error::ApiError};
+use crate::{config::Config, error::ApiError, fetch::Fetcher};
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: Arc<Config>,
+    /// HTTP-Client zum Laden fremder Seiten (mit SSRF-Schutz).
+    pub fetcher: Arc<Fetcher>,
+    /// Begrenzt die gleichzeitigen Seitenabrufe.
+    pub fetch_slots: Arc<Semaphore>,
+}
+
+impl AppState {
+    pub fn new(pool: SqlitePool, config: Config) -> Result<Self, reqwest::Error> {
+        let fetcher = Fetcher::new(
+            config.fetch_allow_private,
+            Duration::from_secs(config.fetch_timeout_secs),
+            config.fetch_max_bytes,
+        )?;
+        Ok(Self {
+            pool,
+            fetcher: Arc::new(fetcher),
+            fetch_slots: Arc::new(Semaphore::new(config.fetch_concurrency)),
+            config: Arc::new(config),
+        })
+    }
 }
 
 /// Baut den Router. Alle Routen liegen unter `/api`.
@@ -34,6 +58,11 @@ pub fn app(state: AppState) -> Router {
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
         .route("/account", delete(auth::delete_account))
+        .route("/articles", post(articles::create).get(articles::list))
+        .route(
+            "/articles/{id}",
+            get(articles::show).delete(articles::remove),
+        )
         .layer(middleware::from_fn(csrf_guard))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .with_state(state);

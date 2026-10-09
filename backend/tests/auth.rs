@@ -1,131 +1,10 @@
 //! Integrationstests für Registrierung, Login, Logout und Konto löschen.
 
-use std::sync::Arc;
+mod common;
 
-use axum::{
-    Router,
-    body::Body,
-    http::{HeaderMap, Method, Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
-use readlater_backend::{AppState, app, config::Config, db};
-use serde_json::{Value, json};
-use sqlx::SqlitePool;
-use tower::ServiceExt;
-
-const PASSWORD: &str = "ein-sicheres-passwort";
-
-struct TestApp {
-    router: Router,
-    pool: SqlitePool,
-}
-
-async fn setup(registration_enabled: bool) -> TestApp {
-    let pool = db::connect_memory().await.expect("DB");
-    let config = Config {
-        database_path: ":memory:".into(),
-        bind_addr: "127.0.0.1:0".into(),
-        registration_enabled,
-        cookie_secure: false,
-        session_days: 30,
-    };
-    let state = AppState {
-        pool: pool.clone(),
-        config: Arc::new(config),
-    };
-    TestApp {
-        router: app(state),
-        pool,
-    }
-}
-
-struct Reply {
-    status: StatusCode,
-    headers: HeaderMap,
-    body: Value,
-}
-
-impl Reply {
-    /// `name=wert` aus dem ersten Set-Cookie-Header.
-    fn cookie(&self) -> Option<String> {
-        self.headers
-            .get(header::SET_COOKIE)
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.split(';').next().unwrap_or("").to_string())
-    }
-
-    fn set_cookie_raw(&self) -> String {
-        self.headers
-            .get(header::SET_COOKIE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string()
-    }
-}
-
-async fn call(
-    app: &TestApp,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-    cookie: Option<&str>,
-    with_csrf_header: bool,
-) -> Reply {
-    let mut builder = Request::builder().method(method).uri(uri);
-    if with_csrf_header {
-        builder = builder.header("x-requested-with", "test");
-    }
-    if let Some(c) = cookie {
-        builder = builder.header(header::COOKIE, c);
-    }
-    let request = match body {
-        Some(json) => builder
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(json.to_string()))
-            .unwrap(),
-        None => builder.body(Body::empty()).unwrap(),
-    };
-    let response = app.router.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let headers = response.headers().clone();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    Reply {
-        status,
-        headers,
-        body,
-    }
-}
-
-async fn post(app: &TestApp, uri: &str, body: Value, cookie: Option<&str>) -> Reply {
-    call(app, Method::POST, uri, Some(body), cookie, true).await
-}
-
-async fn get(app: &TestApp, uri: &str, cookie: Option<&str>) -> Reply {
-    call(app, Method::GET, uri, None, cookie, false).await
-}
-
-async fn register(app: &TestApp, email: &str) -> Reply {
-    post(
-        app,
-        "/api/register",
-        json!({ "email": email, "password": PASSWORD }),
-        None,
-    )
-    .await
-}
-
-async fn count(pool: &SqlitePool, table: &str) -> i64 {
-    let sql: &'static str = match table {
-        "users" => "SELECT COUNT(*) FROM users",
-        "sessions" => "SELECT COUNT(*) FROM sessions",
-        "articles" => "SELECT COUNT(*) FROM articles",
-        "tags" => "SELECT COUNT(*) FROM tags",
-        "article_tags" => "SELECT COUNT(*) FROM article_tags",
-        other => panic!("unbekannte Tabelle: {other}"),
-    };
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
-}
+use axum::http::{Method, StatusCode};
+use common::*;
+use serde_json::json;
 
 #[tokio::test]
 async fn health_ist_ohne_login_erreichbar() {
@@ -319,7 +198,7 @@ async fn konto_loeschen_entfernt_alle_daten_des_benutzers() {
     let bert_id = bert.body["id"].as_i64().unwrap();
     let bert_cookie = bert.cookie().unwrap();
 
-    // Artikel und Schlagwörter direkt anlegen (die API dafür folgt in Schritt 2/3).
+    // Artikel und Schlagwörter direkt anlegen (Schlagwort-API folgt in Schritt 3).
     for (user, url, tag) in [
         (anna_id, "https://example.com/a", "rust"),
         (bert_id, "https://example.com/b", "web"),
