@@ -36,6 +36,7 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 - **Sessions**: zufälliges Token (32 Byte) im Cookie `session` (HttpOnly, SameSite=Lax, optional Secure). In der Datenbank steht nur der SHA-256-Hash.
 - **Passwörter**: argon2id (Standardparameter), mindestens 10 Zeichen. Login prüft auch bei unbekannter E-Mail einen Hash und gibt immer dieselbe Fehlermeldung zurück.
 - **CSRF**: Alle Anfragen außer GET/HEAD/OPTIONS brauchen den Header `X-Requested-With`. Das Frontend setzt ihn in `js/api.js`.
+- **Passwort ändern**: `PUT /api/account/password` mit bisherigem und neuem Passwort (gleiche Regeln wie bei der Registrierung). Danach werden alle Sessions des Benutzers gelöscht und für das aktuelle Gerät wird eine neue angelegt.
 - **Konto löschen**: erfordert das Passwort. Artikel, Schlagwörter und Sessions verschwinden per `ON DELETE CASCADE` (Fremdschlüssel sind pro Verbindung aktiviert, siehe `db.rs`).
 - **Registrierung**: per `REGISTRATION_ENABLED=false` abschaltbar.
 - **Artikel abrufen (SSRF-Schutz)**: nur http/https ohne Zugangsdaten; ein eigener DNS-Resolver (`PublicOnlyResolver` in `fetch.rs`) liefert nur öffentliche IPs, das gilt damit auch für Redirects (max. 5, jeder Hop wird geprüft) und gegen DNS-Rebinding. Kein Proxy, Gesamt-Timeout, Größenlimit auf die entpackten Bytes (Gzip-Bomben), nur HTML, gleichzeitige Abrufe begrenzt (sonst 429). Duplikate (pro Benutzer, ohne Fragment) liefern 409 ohne erneuten Abruf.

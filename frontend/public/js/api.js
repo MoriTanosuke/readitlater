@@ -43,6 +43,11 @@ export const api = {
   register: (email, password) => request('POST', '/register', { email, password }),
   login: (email, password) => request('POST', '/login', { email, password }),
   logout: () => request('POST', '/logout'),
+  changePassword: (currentPassword, newPassword) =>
+    request('PUT', '/account/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
   listArticles: (limit, offset) => request('GET', `/articles?limit=${limit}&offset=${offset}`),
   addArticle: (url) => request('POST', '/articles', { url }),
