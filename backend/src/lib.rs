@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod extract;
 pub mod fetch;
+pub mod tags;
 
 use std::{sync::Arc, time::Duration};
 
@@ -62,8 +63,11 @@ pub fn app(state: AppState) -> Router {
         .route("/articles", post(articles::create).get(articles::list))
         .route(
             "/articles/{id}",
-            get(articles::show).delete(articles::remove),
+            get(articles::show)
+                .patch(articles::update)
+                .delete(articles::remove),
         )
+        .route("/tags", get(tags::list))
         .layer(middleware::from_fn(csrf_guard))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .with_state(state);
