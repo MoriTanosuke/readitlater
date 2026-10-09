@@ -124,14 +124,27 @@ export async function openApp(backendUrl) {
 
   const realFetch = globalThis.fetch;
   let cookie = '';
+  let inFlight = 0; // laufende Anfragen der App (für idle())
   globalThis.fetch = async (route, init = {}) => {
-    const headers = { ...init.headers, ...(cookie ? { cookie } : {}) };
-    const response = await realFetch(backendUrl + route, { ...init, headers });
-    for (const header of response.headers.getSetCookie()) {
-      const pair = header.split(';')[0];
-      cookie = pair.endsWith('=') ? '' : pair;
+    inFlight += 1;
+    try {
+      const headers = { ...init.headers, ...(cookie ? { cookie } : {}) };
+      const response = await realFetch(backendUrl + route, { ...init, headers });
+      for (const header of response.headers.getSetCookie()) {
+        const pair = header.split(';')[0];
+        cookie = pair.endsWith('=') ? '' : pair;
+      }
+      // Den Body vollständig lesen, damit die App ihn danach ohne Wartezeit auswerten kann.
+      const noBody = [204, 205, 304].includes(response.status);
+      const body = noBody ? null : await response.arrayBuffer();
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    } finally {
+      inFlight -= 1;
     }
-    return response;
   };
 
   await import(pathToFileURL(path.join(PUBLIC, 'js/app.js')).href);
@@ -151,6 +164,17 @@ export async function openApp(backendUrl) {
         `Zeitüberschreitung: ${label}\nSeite: ${document.body.textContent.replace(/\s+/g, ' ').slice(0, 400)}`,
       );
     },
+    /**
+     * Wartet, bis die App keine Anfragen mehr offen hat und ihre Antworten verarbeitet sind.
+     * Nötig vor dem Abbau, sonst trifft eine späte Antwort ein geschlossenes Fenster.
+     */
+    async idle() {
+      let quiet = 0;
+      while (quiet < 5) {
+        await sleep(20);
+        quiet = inFlight === 0 ? quiet + 1 : 0;
+      }
+    },
     close: () => window.close(),
   };
 }
@@ -166,6 +190,7 @@ export async function setup(pages = {}) {
       ...app,
       site,
       async teardown() {
+        await app.idle();
         app.close();
         await backend.stop();
         await site.stop();

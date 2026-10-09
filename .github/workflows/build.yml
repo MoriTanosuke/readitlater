@@ -37,11 +37,8 @@ jobs:
       - name: Frontend-Tests
         working-directory: frontend/tests
         run: |
-          node --version
           npm ci
-          npm test 2>&1 | tee /tmp/fe.log; code=${PIPESTATUS[0]}
-          grep -E "not ok|error:|Error|Zeit|Backend|expected|actual" /tmp/fe.log | head -15 | while IFS= read -r l; do echo "::error::$l"; done
-          exit $code
+          npm test
 
   images:
     needs: test
