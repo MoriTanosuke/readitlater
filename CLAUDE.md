@@ -5,7 +5,7 @@ Artikel per URL speichern, Volltext durchsuchen, mit Schlagwörtern versehen und
 ## Stack
 
 - **Backend** (`/backend`): Rust, axum, tokio, sqlx (SQLite, eingebettete Migrationen), argon2, eigene Session-Verwaltung
-- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module), keine Buildchain, kein npm
+- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module), keine Buildchain, kein npm. Einzige Ausnahme sind die Tests in `/frontend/tests` (npm mit `jsdom` als einziger Entwicklungsabhängigkeit), sie gehören nicht in die Images.
 - **Auslieferung**: Caddy (`/frontend/Caddyfile`) liefert das Frontend aus und leitet `/api/*` ans Backend. Dadurch gibt es nur eine Origin und kein CORS.
 - **Deployment**: GitHub Actions baut zwei Images nach ghcr.io (`<repo>-backend`, `<repo>-web`), Watchtower (Fork `nicholas-fedor/watchtower`) zieht sie auf dem Server. Der Push auf `main` deployt automatisch.
 - **Daten**: SQLite im WAL-Modus, Datei liegt im Volume `/data`, nie im Image.
@@ -18,6 +18,9 @@ cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test   # vor jed
 DATABASE_PATH=./data/app.db cargo run                                   # Backend lokal auf :3000
 
 # Komplettes System lokal (Caddy + Backend), http://localhost:8080
+# Frontend-Tests (echtes Frontend in jsdom gegen das gebaute Backend; Node 22)
+cd backend && cargo build && cd ../frontend/tests && npm ci && npm test
+
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
@@ -32,6 +35,8 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 - Wichtige Entscheidungen hier festhalten.
 
 ## Entscheidungen
+
+- **Tests**: Rust-Tests (Unit und Integration) liegen in `backend`. Die Frontend-Tests in `frontend/tests` starten das echte Backend mit frischer temporärer Datenbank und einen lokalen Testserver für die Artikelseiten und laden `index.html` samt `app.js` in jsdom (`node --test`). `FETCH_ALLOW_PRIVATE=true` ist dafür gesetzt. Die CI führt beides im Job `test` aus, die Image-Builds laufen erst danach (`needs: test`). Ein anderes Backend-Programm lässt sich mit `BACKEND_BIN` angeben.
 
 - **Sessions**: zufälliges Token (32 Byte) im Cookie `session` (HttpOnly, SameSite=Lax, optional Secure). In der Datenbank steht nur der SHA-256-Hash.
 - **Passwörter**: argon2id (Standardparameter), mindestens 10 Zeichen. Login prüft auch bei unbekannter E-Mail einen Hash und gibt immer dieselbe Fehlermeldung zurück.

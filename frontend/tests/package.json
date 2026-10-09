@@ -1,0 +1,12 @@
+{
+  "name": "leseliste-frontend-tests",
+  "private": true,
+  "type": "module",
+  "description": "Tests für das Frontend (jsdom gegen das echte Backend). Nur Entwicklungswerkzeug, nicht Teil des Images.",
+  "scripts": {
+    "test": "node --test \"*.test.mjs\""
+  },
+  "devDependencies": {
+    "jsdom": "29.1.1"
+  }
+}
