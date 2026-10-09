@@ -5,7 +5,7 @@ Artikel per URL speichern, Volltext durchsuchen, mit Schlagwörtern versehen und
 ## Stack
 
 - **Backend** (`/backend`): Rust, axum, tokio, sqlx (SQLite, eingebettete Migrationen), argon2, eigene Session-Verwaltung
-- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module), keine Buildchain, kein npm. Einzige Ausnahme sind die Tests in `/frontend/tests` (npm mit `jsdom` als einziger Entwicklungsabhängigkeit), sie gehören nicht in die Images.
+- **Frontend** (`/frontend/public`): nur HTML, CSS und JavaScript (ES-Module), keine Buildchain, kein npm. Der Frontend-Code (`/frontend/public`) bleibt statisch: keine npm-Pakete, keine Buildchain, kein Transpiler oder Bundler. Npm ist nur für Testwerkzeuge in `/frontend/tests` erlaubt (siehe Entscheidung „Tests“), sie gehören nie in die Images.
 - **Auslieferung**: Caddy (`/frontend/Caddyfile`) liefert das Frontend aus und leitet `/api/*` ans Backend. Dadurch gibt es nur eine Origin und kein CORS.
 - **Deployment**: GitHub Actions baut zwei Images nach ghcr.io (`<repo>-backend`, `<repo>-web`), Watchtower (Fork `nicholas-fedor/watchtower`) zieht sie auf dem Server. Der Push auf `main` deployt automatisch.
 - **Daten**: SQLite im WAL-Modus, Datei liegt im Volume `/data`, nie im Image.
@@ -36,7 +36,7 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 
 ## Entscheidungen
 
-- **Tests**: Rust-Tests (Unit und Integration) liegen in `backend`. Die Frontend-Tests in `frontend/tests` starten das echte Backend mit frischer temporärer Datenbank und einen lokalen Testserver für die Artikelseiten und laden `index.html` samt `app.js` in jsdom (`node --test`). `FETCH_ALLOW_PRIVATE=true` ist dafür gesetzt. Die CI führt beides im Job `test` aus, die Image-Builds laufen erst danach (`needs: test`). Ein anderes Backend-Programm lässt sich mit `BACKEND_BIN` angeben.
+- **Tests**: Rust-Tests (Unit und Integration) liegen in `backend`. Die Frontend-Tests in `frontend/tests` starten das echte Backend mit frischer temporärer Datenbank und einen lokalen Testserver für die Artikelseiten und laden `index.html` samt `app.js` in jsdom (`node --test`). `FETCH_ALLOW_PRIVATE=true` ist dafür gesetzt. Die CI führt beides im Job `test` aus, die Image-Builds laufen erst danach (`needs: test`). Ein anderes Backend-Programm lässt sich mit `BACKEND_BIN` angeben. **Regel (vom Betreiber festgelegt):** Das Vorgehen gilt nur, solange das Frontend statisch bleibt, ohne npm-Pakete und ohne Buildchain für den Frontend-Code. Als Testwerkzeug ist jsdom erlaubt, für Smoketests gegen die laufenden Container auch Playwright. Weitere Testabhängigkeiten nur sparsam und mit kurzer Begründung.
 
 - **Sessions**: zufälliges Token (32 Byte) im Cookie `session` (HttpOnly, SameSite=Lax, optional Secure). In der Datenbank steht nur der SHA-256-Hash.
 - **Passwörter**: argon2id (Standardparameter), mindestens 10 Zeichen. Login prüft auch bei unbekannter E-Mail einen Hash und gibt immer dieselbe Fehlermeldung zurück.
