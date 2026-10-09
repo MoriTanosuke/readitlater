@@ -44,4 +44,8 @@ export const api = {
   login: (email, password) => request('POST', '/login', { email, password }),
   logout: () => request('POST', '/logout'),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
+  listArticles: (limit, offset) => request('GET', `/articles?limit=${limit}&offset=${offset}`),
+  addArticle: (url) => request('POST', '/articles', { url }),
+  getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
+  deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),
 };

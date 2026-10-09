@@ -15,7 +15,14 @@ pub enum ApiError {
     /// Falsche E-Mail oder falsches Passwort (bewusst nicht unterscheidbar).
     BadCredentials,
     Forbidden(String),
+    NotFound(String),
     Conflict(String),
+    /// Anfrage ist formal korrekt, der Inhalt lässt sich aber nicht verarbeiten.
+    Unprocessable(String),
+    /// Zu viele gleichzeitige Seitenabrufe.
+    TooManyRequests,
+    /// Die fremde Webseite war nicht erreichbar oder hat nicht geantwortet.
+    BadGateway(String),
     Internal(String),
 }
 
@@ -47,7 +54,14 @@ impl IntoResponse for ApiError {
                 "E-Mail oder Passwort ist falsch".to_string(),
             ),
             Self::Forbidden(m) => (StatusCode::FORBIDDEN, m),
+            Self::NotFound(m) => (StatusCode::NOT_FOUND, m),
             Self::Conflict(m) => (StatusCode::CONFLICT, m),
+            Self::Unprocessable(m) => (StatusCode::UNPROCESSABLE_ENTITY, m),
+            Self::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Es laufen gerade zu viele Abrufe. Bitte gleich noch einmal versuchen".to_string(),
+            ),
+            Self::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             Self::Internal(detail) => {
                 // Details nur ins Log, nie an den Client.
                 tracing::error!("interner Fehler: {detail}");

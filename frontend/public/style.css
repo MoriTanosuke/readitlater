@@ -123,3 +123,78 @@ button.primary {
 .danger summary { cursor: pointer; color: var(--danger); min-height: 2.75rem; display: flex; align-items: center; }
 
 .danger-btn { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+
+a { color: var(--accent); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wide { width: 100%; margin-top: 0.75rem; }
+
+/* Artikel hinzufügen */
+.add-form { flex-direction: row; gap: 0.5rem; margin-bottom: 0.5rem; }
+.add-form input { flex: 1; min-width: 0; }
+#add-status, #add-error { margin: 0.25rem 0 0.5rem; }
+
+/* Artikelliste */
+.article-list { list-style: none; margin: 1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+
+.article {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.article-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.article-main:hover .article-title { text-decoration: underline; }
+.article-title { font-weight: 600; overflow-wrap: anywhere; }
+.article-meta { color: var(--muted); font-size: 0.8125rem; }
+
+.article-excerpt {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.icon-btn { border: 0; border-left: 1px solid var(--border); border-radius: 0 var(--radius) var(--radius) 0; background: transparent; color: var(--muted); font-size: 0.875rem; }
+.icon-btn:hover { color: var(--danger); }
+
+/* Lesemodus */
+.reader-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; min-height: 2.75rem; }
+.reader-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+#reader-title { overflow-wrap: anywhere; line-height: 1.25; }
+#reader-meta { margin-top: -0.5rem; font-size: 0.875rem; }
+
+.prose { font-size: 1.0625rem; line-height: 1.7; overflow-wrap: anywhere; }
+.prose img { max-width: 100%; height: auto; border-radius: 6px; }
+.prose figure { margin: 1rem 0; }
+.prose figcaption { color: var(--muted); font-size: 0.875rem; }
+.prose blockquote { margin: 1rem 0; padding: 0 0 0 1rem; border-left: 3px solid var(--border); color: var(--muted); }
+.prose pre { overflow-x: auto; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: 0.875rem; }
+.prose code { font-size: 0.9em; }
+.prose table { display: block; overflow-x: auto; border-collapse: collapse; }
+.prose th, .prose td { border: 1px solid var(--border); padding: 0.25rem 0.5rem; }

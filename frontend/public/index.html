@@ -43,7 +43,19 @@
         </div>
       </header>
 
-      <p class="empty">Noch keine Artikel. Das Speichern per URL kommt im nächsten Schritt.</p>
+      <form id="form-add" class="add-form">
+        <label class="visually-hidden" for="add-url">Adresse des Artikels</label>
+        <input id="add-url" name="url" type="text" inputmode="url" autocapitalize="off"
+               autocomplete="off" spellcheck="false" placeholder="Adresse einfügen, z. B. https://…" required>
+        <button type="submit" id="add-submit" class="primary">Speichern</button>
+      </form>
+      <p id="add-status" class="muted" role="status" hidden></p>
+      <p id="add-error" class="error" role="alert" hidden></p>
+
+      <ul id="article-list" class="article-list"></ul>
+      <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
+      <p id="list-error" class="error" role="alert" hidden></p>
+      <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
 
       <details class="danger">
         <summary>Konto löschen</summary>
@@ -56,6 +68,19 @@
           <button type="submit" class="danger-btn">Konto endgültig löschen</button>
         </form>
       </details>
+    </section>
+
+    <section id="view-reader" hidden>
+      <nav class="reader-nav">
+        <a href="#/" id="reader-back">← Zur Liste</a>
+        <button type="button" id="reader-delete" class="danger-btn" hidden>Artikel löschen</button>
+      </nav>
+      <article>
+        <h1 id="reader-title"></h1>
+        <p id="reader-meta" class="muted"></p>
+        <p id="reader-error" class="error" role="alert" hidden></p>
+        <div id="reader-content" class="prose"></div>
+      </article>
     </section>
 
   </main>

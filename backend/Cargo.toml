@@ -4,11 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ammonia = "4.2.1"
 argon2 = "0.6"
 axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
+dom_smoothie = "0.18.2"
+encoding_rs = "0.8.42"
 getrandom = "0.4"
 hex = "0.4"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "charset", "gzip", "brotli"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -17,13 +22,19 @@ time = "0.3"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2.5.8"
 
 [dev-dependencies]
+flate2 = "1.1.10"
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 
-# Argon2 ist im Debug-Build sehr langsam, daher auch in Tests optimieren.
-[profile.dev.package."*"]
+# Argon2 ist im Debug-Build sehr langsam, daher nur diese Pakete auch in Tests optimieren.
+# (Alle Abhängigkeiten zu optimieren würde den Build mit den vielen Crates stark verlangsamen.)
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
 opt-level = 3
 
 [profile.release]
