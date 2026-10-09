@@ -57,6 +57,25 @@
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
 
+      <details class="account-section">
+        <summary>Passwort ändern</summary>
+        <form id="form-password">
+          <label>Bisheriges Passwort
+            <input type="password" name="current" autocomplete="current-password" required>
+          </label>
+          <label>Neues Passwort
+            <input type="password" name="new" autocomplete="new-password" minlength="10" maxlength="256" required>
+          </label>
+          <label>Neues Passwort wiederholen
+            <input type="password" name="repeat" autocomplete="new-password" minlength="10" maxlength="256" required>
+          </label>
+          <p class="hint">Mindestens 10 Zeichen. Auf allen anderen Geräten wirst du abgemeldet.</p>
+          <p id="password-error" class="error" role="alert" hidden></p>
+          <p id="password-ok" class="success" role="status" hidden></p>
+          <button type="submit" class="primary">Passwort ändern</button>
+        </form>
+      </details>
+
       <details class="danger">
         <summary>Konto löschen</summary>
         <form id="form-delete">

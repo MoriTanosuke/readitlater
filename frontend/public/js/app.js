@@ -135,6 +135,28 @@ $('btn-logout').addEventListener('click', async () => {
   }
 });
 
+$('form-password').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  clearError($('password-error'));
+  $('password-ok').hidden = true;
+  const { current, new: next, repeat } = form.elements;
+  if (next.value !== repeat.value) {
+    showError($('password-error'), 'Die neuen Passwörter stimmen nicht überein.');
+    return;
+  }
+  try {
+    await withBusy(form.querySelector('button[type="submit"]'), () =>
+      api.changePassword(current.value, next.value),
+    );
+    form.reset();
+    $('password-ok').textContent = 'Das Passwort wurde geändert.';
+    $('password-ok').hidden = false;
+  } catch (error) {
+    showError($('password-error'), error.message);
+  }
+});
+
 $('form-delete').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;

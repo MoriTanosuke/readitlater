@@ -1,4 +1,4 @@
-//! Integrationstests für Registrierung, Login, Logout und Konto löschen.
+//! Integrationstests für Registrierung, Login, Logout, Passwort ändern und Konto löschen.
 
 mod common;
 
@@ -272,4 +272,119 @@ async fn konto_loeschen_entfernt_alle_daten_des_benutzers() {
         register(&app, "anna@example.com").await.status,
         StatusCode::CREATED
     );
+}
+
+async fn change_password(app: &TestApp, cookie: Option<&str>, current: &str, new: &str) -> Reply {
+    call(
+        app,
+        Method::PUT,
+        "/api/account/password",
+        Some(json!({ "current_password": current, "new_password": new })),
+        cookie,
+        true,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn passwort_aendern_beendet_alte_sessions_und_meldet_neu_an() {
+    let app = setup(true).await;
+    let anna_cookie = register_cookie(&app, "anna@example.com").await;
+    let bert_cookie = register_cookie(&app, "bert@example.com").await;
+    // Zweites Gerät von Anna.
+    let login = post(
+        &app,
+        "/api/login",
+        json!({ "email": "anna@example.com", "password": PASSWORD }),
+        None,
+    )
+    .await;
+    let zweites_geraet = login.cookie().expect("Cookie");
+
+    let neu = "ein-ganz-neues-passwort";
+    let reply = change_password(&app, Some(&anna_cookie), PASSWORD, neu).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    let neues_cookie = reply.cookie().expect("neue Session");
+
+    // Alte Sessions sind ungültig, die neue gilt, Berts Session bleibt.
+    assert_eq!(
+        get(&app, "/api/me", Some(&anna_cookie)).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        get(&app, "/api/me", Some(&zweites_geraet)).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        get(&app, "/api/me", Some(&neues_cookie)).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&app, "/api/me", Some(&bert_cookie)).await.status,
+        StatusCode::OK
+    );
+
+    // Login: nur noch mit dem neuen Passwort.
+    let alt = post(
+        &app,
+        "/api/login",
+        json!({ "email": "anna@example.com", "password": PASSWORD }),
+        None,
+    )
+    .await;
+    assert_eq!(alt.status, StatusCode::UNAUTHORIZED);
+    let neu_login = post(
+        &app,
+        "/api/login",
+        json!({ "email": "anna@example.com", "password": neu }),
+        None,
+    )
+    .await;
+    assert_eq!(neu_login.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn passwort_aendern_lehnt_falsche_und_ungueltige_eingaben_ab() {
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+
+    let falsch = change_password(
+        &app,
+        Some(&cookie),
+        "falsches-passwort",
+        "neues-passwort-123",
+    )
+    .await;
+    assert_eq!(falsch.status, StatusCode::FORBIDDEN);
+
+    let zu_kurz = change_password(&app, Some(&cookie), PASSWORD, "kurz").await;
+    assert_eq!(zu_kurz.status, StatusCode::BAD_REQUEST);
+
+    let ohne_login = change_password(&app, None, PASSWORD, "neues-passwort-123").await;
+    assert_eq!(ohne_login.status, StatusCode::UNAUTHORIZED);
+
+    let ohne_csrf = call(
+        &app,
+        Method::PUT,
+        "/api/account/password",
+        Some(json!({ "current_password": PASSWORD, "new_password": "neues-passwort-123" })),
+        Some(&cookie),
+        false,
+    )
+    .await;
+    assert_eq!(ohne_csrf.status, StatusCode::FORBIDDEN);
+
+    // Nichts davon hat etwas geändert: Session und Passwort gelten weiter.
+    assert_eq!(
+        get(&app, "/api/me", Some(&cookie)).await.status,
+        StatusCode::OK
+    );
+    let login = post(
+        &app,
+        "/api/login",
+        json!({ "email": "anna@example.com", "password": PASSWORD }),
+        None,
+    )
+    .await;
+    assert_eq!(login.status, StatusCode::OK);
 }

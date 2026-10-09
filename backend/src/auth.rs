@@ -1,4 +1,4 @@
-//! Registrierung, Login, Logout, Konto löschen.
+//! Registrierung, Login, Logout, Passwort ändern, Konto löschen.
 
 use std::{
     sync::OnceLock,
@@ -34,6 +34,12 @@ pub struct Credentials {
 #[derive(Deserialize)]
 pub struct PasswordConfirmation {
     password: String,
+}
+
+#[derive(Deserialize)]
+pub struct PasswordChange {
+    current_password: String,
+    new_password: String,
 }
 
 #[derive(Serialize)]
@@ -166,6 +172,57 @@ pub async fn me(user: AuthUser) -> Json<UserOut> {
         id: user.id,
         email: user.email,
     })
+}
+
+/// Ändert das Passwort. Das bisherige Passwort muss angegeben werden. Danach werden
+/// alle Sessions des Benutzers beendet (auch auf anderen Geräten) und für dieses
+/// Gerät wird eine neue Session angelegt.
+pub async fn change_password(
+    State(state): State<AppState>,
+    user: AuthUser,
+    jar: CookieJar,
+    ApiJson(body): ApiJson<PasswordChange>,
+) -> Result<(CookieJar, StatusCode), ApiError> {
+    validate_password(&body.new_password)?;
+
+    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
+        .bind(user.id)
+        .fetch_one(&state.pool)
+        .await?;
+    let PasswordChange {
+        current_password,
+        new_password,
+    } = body;
+    let (valid, new_hash) = tokio::task::spawn_blocking(move || {
+        let valid = verify_password(&current_password, &stored_hash);
+        // Der neue Hash wird nur bei richtigem bisherigem Passwort berechnet.
+        let new_hash = valid.then(|| hash_password(&new_password));
+        (valid, new_hash)
+    })
+    .await
+    .map_err(ApiError::internal)?;
+    if !valid {
+        return Err(ApiError::Forbidden("Passwort ist falsch".into()));
+    }
+    let new_hash = new_hash.ok_or_else(|| ApiError::internal("Hash fehlt"))??;
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(&new_hash)
+        .bind(user.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+        .bind(user.id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    let token = create_session(&state, user.id).await?;
+    Ok((
+        jar.add(session_cookie(&state, token)),
+        StatusCode::NO_CONTENT,
+    ))
 }
 
 /// Löscht das Konto samt Sessions, Artikeln und Schlagwörtern (ON DELETE CASCADE).

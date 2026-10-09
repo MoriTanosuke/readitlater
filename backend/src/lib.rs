@@ -16,7 +16,7 @@ use axum::{
     http::Method,
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use sqlx::SqlitePool;
 use tokio::sync::Semaphore;
@@ -58,6 +58,7 @@ pub fn app(state: AppState) -> Router {
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
         .route("/account", delete(auth::delete_account))
+        .route("/account/password", put(auth::change_password))
         .route("/articles", post(articles::create).get(articles::list))
         .route(
             "/articles/{id}",

@@ -113,12 +113,17 @@ button.primary {
 
 .who { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
+.account-section,
 .danger {
   margin-top: 3rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
 }
+
+.account-section summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center; }
+.account-section + .danger { margin-top: 1rem; }
+.success { color: var(--accent); margin: 0; }
 
 .danger summary { cursor: pointer; color: var(--danger); min-height: 2.75rem; display: flex; align-items: center; }
 
