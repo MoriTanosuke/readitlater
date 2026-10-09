@@ -4,7 +4,7 @@ Read-it-later-App mit Rust-Backend (axum, SQLite) und Frontend aus reinem HTML, 
 
 ## Ablauf
 
-1. Push auf `main` startet den Workflow `.github/workflows/build.yml`. Er prüft das Backend (fmt, clippy, Tests) und baut zwei Images nach ghcr.io: `ghcr.io/<benutzer>/<repo>-backend` und `...-web`.
+1. Push auf `main` startet den Workflow `.github/workflows/build.yml`. Er prüft das Backend (fmt, clippy, Tests) und das Frontend (jsdom-Tests gegen das gebaute Backend) und baut zwei Images nach ghcr.io: `ghcr.io/<benutzer>/<repo>-backend` und `...-web`.
 2. Auf dem Server holt Watchtower neue Images (Prüfintervall 5 Minuten) und startet die Container neu.
 3. In Pull Requests werden Tests und Image-Build ausgeführt, aber nichts veröffentlicht.
 
