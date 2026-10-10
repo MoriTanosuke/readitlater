@@ -53,6 +53,7 @@ Konfiguration nur über Umgebungsvariablen: `DATABASE_PATH`, `BIND_ADDR`, `REGIS
 - **Extraktion**: `dom_smoothie` (Readability), Ergebnis wird mit `ammonia` bereinigt. `content` = bereinigtes HTML, `content_text` = Klartext (für FTS5 in Schritt 3), `excerpt` (Migration 0002). TLS über rustls mit `ring` (einfacher für musl-Builds als aws-lc-rs).
 - **Frontend-Regel**: Ausnahme ist `js/safe-html.js`: Artikel-HTML wird per DOMParser geparst und mit createElement über eine Positivliste neu aufgebaut (zusätzlich zu ammonia). Die CSP erlaubt `img-src 'self' https: data:`.
 - **Frontend-Regel**: nie `innerHTML` mit Daten aus der API. Immer `textContent` oder DOM-Methoden. Die CSP in der Caddyfile erlaubt keine Inline-Skripte.
+- **Build-Zeit**: Im Release-Profil ist LTO aus. Gemessen (2 Kerne, lokal): Neubau nur des eigenen Codes 68 s mit `lto = "thin"` gegen 18 s ohne, volle Kette 216 s gegen 175 s, Binary in beiden Fällen etwa 13 MB. Der Docker-Build cached die Abhängigkeiten in einer eigenen Schicht (nur `Cargo.toml` und `Cargo.lock`); ändert sich eine der beiden Dateien, werden alle Abhängigkeiten neu gebaut.
 - **Versionen** (Stand Okt. 2026): sqlx 0.9 akzeptiert nur `&'static str` als SQL (dynamische Strings nur mit `AssertSqlSafe`), argon2 0.6 nutzt `password_hash::phc::PasswordHash` und erzeugt den Salt selbst.
 
 ## Status und Planung
