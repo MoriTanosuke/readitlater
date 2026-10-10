@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, Method, Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use readlater_backend::{AppState, app, config::Config, db};
+use readlater_backend::{AppState, app, config::Config, db, ratelimit::RateLimitConfig};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use tower::ServiceExt;
@@ -23,6 +23,12 @@ pub fn test_config() -> Config {
     Config {
         database_path: ":memory:".into(),
         bind_addr: "127.0.0.1:0".into(),
+        // Die meisten Tests melden sich oft an und rufen viel ab. Die Ratenbegrenzung
+        // hat eigene Tests (tests/ratelimit.rs).
+        rate_limits: RateLimitConfig {
+            enabled: false,
+            ..RateLimitConfig::default()
+        },
         ..Config::default()
     }
 }

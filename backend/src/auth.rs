@@ -8,7 +8,7 @@ use std::{
 use argon2::{Argon2, PasswordHasher, PasswordVerifier, password_hash::phc::PasswordHash};
 use axum::{
     Json,
-    extract::{FromRequestParts, State},
+    extract::{Extension, FromRequestParts, State},
     http::{StatusCode, request::Parts},
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     AppState,
     error::{ApiError, ApiJson},
+    ratelimit::ClientIp,
 };
 
 const COOKIE_NAME: &str = "session";
@@ -122,10 +123,12 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    Extension(ip): Extension<ClientIp>,
     jar: CookieJar,
     ApiJson(creds): ApiJson<Credentials>,
 ) -> Result<(CookieJar, Json<UserOut>), ApiError> {
     let email = creds.email.trim().to_lowercase();
+    state.limits.check_login(ip, &email)?;
     let user: Option<(i64, String, String)> =
         sqlx::query_as("SELECT id, email, password_hash FROM users WHERE email = ?")
             .bind(&email)
@@ -183,6 +186,7 @@ pub async fn change_password(
     jar: CookieJar,
     ApiJson(body): ApiJson<PasswordChange>,
 ) -> Result<(CookieJar, StatusCode), ApiError> {
+    state.limits.check_password_action(user.id)?;
     validate_password(&body.new_password)?;
 
     let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
@@ -233,6 +237,7 @@ pub async fn delete_account(
     jar: CookieJar,
     ApiJson(confirmation): ApiJson<PasswordConfirmation>,
 ) -> Result<(StatusCode, CookieJar), ApiError> {
+    state.limits.check_password_action(user.id)?;
     let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
         .bind(user.id)
         .fetch_one(&state.pool)

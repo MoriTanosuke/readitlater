@@ -3,7 +3,7 @@
 use axum::{
     Json,
     extract::{FromRequest, rejection::JsonRejection},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde_json::json;
@@ -21,6 +21,10 @@ pub enum ApiError {
     Unprocessable(String),
     /// Zu viele gleichzeitige Seitenabrufe.
     TooManyRequests,
+    /// Ratenbegrenzung: nach so vielen Sekunden darf es erneut versucht werden.
+    RateLimited {
+        retry_after_secs: u64,
+    },
     /// Die fremde Webseite war nicht erreichbar oder hat nicht geantwortet.
     BadGateway(String),
     Internal(String),
@@ -46,6 +50,18 @@ impl From<JsonRejection> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        if let Self::RateLimited { retry_after_secs } = self {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, retry_after_secs.to_string())],
+                Json(json!({
+                    "error": format!(
+                        "Zu viele Anfragen. Bitte in {retry_after_secs} Sekunden erneut versuchen"
+                    )
+                })),
+            )
+                .into_response();
+        }
         let (status, message) = match self {
             Self::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Nicht angemeldet".to_string()),
@@ -60,6 +76,11 @@ impl IntoResponse for ApiError {
             Self::TooManyRequests => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "Es laufen gerade zu viele Abrufe. Bitte gleich noch einmal versuchen".to_string(),
+            ),
+            // Wird oben behandelt, die Zeile hält nur das match vollständig.
+            Self::RateLimited { .. } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Zu viele Anfragen".to_string(),
             ),
             Self::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             Self::Internal(detail) => {

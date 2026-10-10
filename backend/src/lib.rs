@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod extract;
 pub mod fetch;
+pub mod ratelimit;
 pub mod share;
 pub mod tags;
 
@@ -33,6 +34,8 @@ pub struct AppState {
     pub fetcher: Arc<Fetcher>,
     /// Begrenzt die gleichzeitigen Seitenabrufe.
     pub fetch_slots: Arc<Semaphore>,
+    /// Ratenbegrenzung (nur im Speicher).
+    pub limits: Arc<ratelimit::Limits>,
 }
 
 impl AppState {
@@ -46,6 +49,7 @@ impl AppState {
             pool,
             fetcher: Arc::new(fetcher),
             fetch_slots: Arc::new(Semaphore::new(config.fetch_concurrency)),
+            limits: Arc::new(ratelimit::Limits::new(config.rate_limits)),
             config: Arc::new(config),
         })
     }
@@ -53,14 +57,22 @@ impl AppState {
 
 /// Baut den Router. Alle Routen liegen unter `/api`.
 pub fn app(state: AppState) -> Router {
-    let api = Router::new()
-        .route("/health", get(health))
+    // Routen, die Passwörter prüfen oder hashen: strengere Ratenbegrenzung pro IP.
+    let password_routes = Router::new()
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
-        .route("/logout", post(auth::logout))
-        .route("/me", get(auth::me))
         .route("/account", delete(auth::delete_account))
         .route("/account/password", put(auth::change_password))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            ratelimit::auth,
+        ));
+
+    let api = Router::new()
+        .route("/health", get(health))
+        .route("/logout", post(auth::logout))
+        .route("/me", get(auth::me))
+        .merge(password_routes)
         .route("/articles", post(articles::create).get(articles::list))
         .route(
             "/articles/{id}",
@@ -79,6 +91,12 @@ pub fn app(state: AppState) -> Router {
         // darum ohne CSRF-Header (HTTP Shortcuts und Kurzbefehle setzen ihn nicht).
         .route("/share", post(share::share))
         .layer(DefaultBodyLimit::max(64 * 1024))
+        // Äußerste Schicht: Client-Adresse bestimmen und allgemeines Limit anwenden,
+        // bevor Body, Anmeldung oder Hashing etwas kosten.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            ratelimit::general,
+        ))
         .with_state(state);
     Router::new().nest("/api", api)
 }
