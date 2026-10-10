@@ -43,6 +43,7 @@
               <span id="user-email" class="user-email"></span><span aria-hidden="true">▾</span>
             </button>
             <ul id="user-menu" class="menu" hidden>
+              <li><a href="#/account/share">Teilen aus Apps</a></li>
               <li><a href="#/account/password">Passwort ändern</a></li>
               <li><a href="#/account/delete" class="menu-danger">Konto löschen</a></li>
             </ul>
@@ -78,6 +79,58 @@
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
+    </section>
+
+    <section id="view-share" hidden>
+      <h1>Teilen aus anderen Apps</h1>
+      <p>Mit einem Token speicherst du Artikel direkt aus dem Teilen-Menü deines Android-Geräts
+        (HTTP Shortcuts) oder deines iPads (Kurzbefehle). Ein Token darf nur Artikel hinzufügen,
+        nichts lesen oder löschen. Du kannst es jederzeit widerrufen.</p>
+
+      <form id="form-share">
+        <label>Name für das Gerät
+          <input type="text" name="name" maxlength="60" placeholder="z. B. Pixel oder iPad" required>
+        </label>
+        <p id="share-error" class="error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button type="submit" class="primary">Token erzeugen</button>
+          <a href="#/" class="button-link">Zurück zur Liste</a>
+        </div>
+      </form>
+
+      <div id="share-created" class="token-created" role="status" hidden>
+        <p><strong>Neues Token.</strong> Kopiere es jetzt, es wird danach nicht mehr angezeigt.</p>
+        <input type="text" id="share-token-value" readonly aria-label="Neues Token">
+        <button type="button" id="share-copy">Kopieren</button>
+      </div>
+
+      <h2>Deine Tokens</h2>
+      <p id="share-empty" class="empty" hidden>Noch keine Tokens.</p>
+      <ul id="share-list" class="token-list"></ul>
+
+      <h2>Einrichtung</h2>
+      <p>Adresse der Schnittstelle: <code id="share-endpoint"></code></p>
+      <p>Sende eine <code>POST</code>-Anfrage mit dem Header <code>Authorization: Bearer &lt;Token&gt;</code>
+        und der Adresse des Artikels entweder als Text oder als JSON <code>{"url": "https://…"}</code>.
+        Auch ein Freitext wie „Titel https://…“ funktioniert, es zählt die erste Web-Adresse darin.</p>
+      <details>
+        <summary>Android: HTTP Shortcuts</summary>
+        <ol>
+          <li>Neuen Shortcut anlegen, Methode <code>POST</code>, URL wie oben.</li>
+          <li>Header <code>Authorization</code> mit dem Wert <code>Bearer </code> und deinem Token.</li>
+          <li>Anfragetext: „Benutzerdefinierter Text“ mit der Variable für den geteilten Text, Typ <code>text/plain</code>.</li>
+          <li>Die Variable so einstellen, dass sie den Wert aus dem Teilen-Dialog übernimmt, und den Shortcut für das Teilen-Menü freigeben.</li>
+        </ol>
+      </details>
+      <details>
+        <summary>iPad und iPhone: Kurzbefehle</summary>
+        <ol>
+          <li>Neuen Kurzbefehl anlegen, in den Details „Im Share Sheet anzeigen“ einschalten, Eingabe: URLs und Text.</li>
+          <li>Aktion „Inhalte von URL abrufen“: URL wie oben, Methode <code>POST</code>.</li>
+          <li>Header <code>Authorization</code> mit <code>Bearer </code> und deinem Token.</li>
+          <li>Anfragetext: „Datei“ bzw. Text mit der Variable „Kurzbefehleingabe“.</li>
+        </ol>
+      </details>
     </section>
 
     <section id="view-password" hidden>

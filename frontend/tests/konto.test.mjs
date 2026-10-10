@@ -36,7 +36,11 @@ test('Benutzermenü, Passwort ändern und Konto löschen', async (t) => {
   assert.equal($('btn-user').getAttribute('aria-expanded'), 'true');
   assert.deepEqual(
     [...$('user-menu').querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
-    [['Passwort ändern', '#/account/password'], ['Konto löschen', '#/account/delete']],
+    [
+      ['Teilen aus Apps', '#/account/share'],
+      ['Passwort ändern', '#/account/password'],
+      ['Konto löschen', '#/account/delete'],
+    ],
   );
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal($('user-menu').hidden, true);
@@ -51,7 +55,7 @@ test('Benutzermenü, Passwort ändern und Konto löschen', async (t) => {
 
   // Passwortseite über das Menü
   click($('btn-user'));
-  window.location.hash = $('user-menu').querySelector('a').getAttribute('href');
+  window.location.hash = $('user-menu').querySelector('a[href="#/account/password"]').getAttribute('href');
   await until(() => visible('view-password'), 'Passwortseite');
   assert.equal(visible('view-home'), false);
   assert.equal($('user-menu').hidden, true, 'Menü schließt bei Navigation');

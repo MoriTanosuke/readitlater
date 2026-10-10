@@ -27,6 +27,23 @@ Die App läuft dann auf `http://<server>:8080`.
 
 **Registrierung:** Nach dem Anlegen der eigenen Konten `REGISTRATION_ENABLED=false` in `.env` setzen und `docker compose up -d` ausführen.
 
+## Artikel aus anderen Apps teilen
+
+Im Benutzermenü (E-Mail oben rechts) gibt es „Teilen aus Apps“. Dort legst du pro Gerät ein Token an (wird nur einmal angezeigt, es lässt sich einzeln widerrufen). Ein Token darf ausschließlich Artikel hinzufügen. Das Gerät muss den Server erreichen können, bei rein internem Betrieb also im Heimnetz, per VPN oder über Tailscale.
+
+```sh
+# Test von der Kommandozeile
+curl -X POST https://<server>/api/share \
+  -H "Authorization: Bearer lsl_..." \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.org/artikel"}'
+```
+
+Die Schnittstelle akzeptiert die Adresse als JSON (`url` oder `text`), als Formular (`url` oder `text`) oder als reinen Text im Body. Steht im Text mehr als die Adresse (so teilt Android oft: „Titel https://…“), zählt die erste Web-Adresse. Antworten: `201` mit Titel und ID, `409` wenn der Artikel schon gespeichert ist, `400` bei ungültiger Adresse, `401` bei fehlendem oder widerrufenem Token.
+
+- **Android (HTTP Shortcuts):** Shortcut mit Methode `POST`, URL `https://<server>/api/share`, Header `Authorization: Bearer <Token>`, Body-Typ „Benutzerdefinierter Text“ (`text/plain`) mit der Variable für den geteilten Text. Die Variable muss den Wert aus dem Teilen-Dialog übernehmen, und der Shortcut muss im Teilen-Menü erscheinen. Die Bezeichnungen der Einstellungen unterscheiden sich je nach Version der App.
+- **iPad und iPhone (Kurzbefehle):** Neuer Kurzbefehl mit „Im Share Sheet anzeigen“ (Eingabe: URLs und Text), Aktion „Inhalte von URL abrufen“ mit der Schnittstellen-Adresse, Methode `POST`, Header `Authorization: Bearer <Token>` und als Anfragetext die „Kurzbefehleingabe“.
+
 ## Datensicherung
 
 Die SQLite-Datei liegt im Volume `readitlater_app-data`. Konsistente Sicherung bei laufender App:

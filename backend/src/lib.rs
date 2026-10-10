@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod extract;
 pub mod fetch;
+pub mod share;
 pub mod tags;
 
 use std::{sync::Arc, time::Duration};
@@ -68,7 +69,15 @@ pub fn app(state: AppState) -> Router {
                 .delete(articles::remove),
         )
         .route("/tags", get(tags::list))
+        .route(
+            "/share-tokens",
+            get(share::list_tokens).post(share::create_token),
+        )
+        .route("/share-tokens/{id}", delete(share::delete_token))
         .layer(middleware::from_fn(csrf_guard))
+        // Teilen per Token: nutzt nur den Header Authorization und kein Cookie,
+        // darum ohne CSRF-Header (HTTP Shortcuts und Kurzbefehle setzen ihn nicht).
+        .route("/share", post(share::share))
         .layer(DefaultBodyLimit::max(64 * 1024))
         .with_state(state);
     Router::new().nest("/api", api)

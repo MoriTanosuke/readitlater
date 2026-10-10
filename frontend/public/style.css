@@ -259,3 +259,32 @@ a { color: var(--accent); }
   text-decoration: none;
 }
 #home-notice { margin: 0 0 0.75rem; }
+
+/* Teilen aus anderen Apps */
+.token-created {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.token-created p { margin: 0; }
+.token-created input { width: 100%; font-family: ui-monospace, monospace; }
+.token-list { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: 0.5rem; }
+.token-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.token-info { display: grid; gap: 0.125rem; min-width: 0; }
+#view-share code { overflow-wrap: anywhere; }
+#view-share details { margin: 0.5rem 0; }
+#view-share summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center; }

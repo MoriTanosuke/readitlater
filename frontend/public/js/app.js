@@ -2,7 +2,7 @@ import { api, ApiError } from './api.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 
@@ -191,6 +191,84 @@ function backToList(notice = '') {
   location.replace('#/');
 }
 
+// Share-Tokens (#/account/share)
+
+function renderShareTokens(list) {
+  const ul = $('share-list');
+  ul.replaceChildren();
+  $('share-empty').hidden = list.length > 0;
+  for (const item of list) {
+    const li = element('li', 'token-item');
+    const info = element('div', 'token-info');
+    info.append(element('strong', '', item.name));
+    const used = item.last_used_at
+      ? `zuletzt benutzt am ${formatDate(item.last_used_at)}`
+      : 'noch nicht benutzt';
+    info.append(element('span', 'hint', `angelegt am ${formatDate(item.created_at)}, ${used}`));
+    const remove = element('button', 'danger-btn', 'Widerrufen');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Token ${item.name} widerrufen`);
+    remove.addEventListener('click', async () => {
+      if (!window.confirm(`Token „${item.name}“ widerrufen? Das Gerät kann dann nichts mehr teilen.`)) return;
+      try {
+        await withBusy(remove, () => api.deleteShareToken(item.id));
+        await loadShareTokens();
+      } catch (error) {
+        if (!handleAuthError(error)) showError($('share-error'), error.message);
+      }
+    });
+    li.append(info, remove);
+    ul.append(li);
+  }
+}
+
+async function loadShareTokens() {
+  const token = routeToken;
+  try {
+    const list = await api.listShareTokens();
+    if (token === routeToken) renderShareTokens(list);
+  } catch (error) {
+    if (token === routeToken && !handleAuthError(error)) showError($('share-error'), error.message);
+  }
+}
+
+function openSharePage() {
+  openAccountPage('share', 'Teilen aus Apps');
+  $('share-created').hidden = true;
+  $('share-token-value').value = '';
+  $('share-endpoint').textContent = `${location.origin}/api/share`;
+  loadShareTokens();
+}
+
+$('form-share').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  clearError($('share-error'));
+  try {
+    const created = await withBusy(form.querySelector('button[type="submit"]'), () =>
+      api.createShareToken(form.elements.name.value),
+    );
+    form.reset();
+    $('share-token-value').value = created.token;
+    $('share-created').hidden = false;
+    $('share-token-value').select();
+    await loadShareTokens();
+  } catch (error) {
+    if (!handleAuthError(error)) showError($('share-error'), error.message);
+  }
+});
+
+$('share-copy').addEventListener('click', async () => {
+  const input = $('share-token-value');
+  input.select();
+  try {
+    await navigator.clipboard.writeText(input.value);
+    $('share-copy').textContent = 'Kopiert';
+  } catch {
+    // Zwischenablage nicht verfügbar: der Text ist markiert und lässt sich manuell kopieren
+  }
+});
+
 $('form-password').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -240,6 +318,7 @@ function route() {
   closeMenu();
   const match = /^#\/article\/(\d+)$/.exec(location.hash);
   if (match) openReader(Number(match[1]));
+  else if (location.hash === '#/account/share') openSharePage();
   else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
   else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
   else openList();
