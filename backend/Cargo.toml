@@ -40,4 +40,5 @@ opt-level = 3
 
 [profile.release]
 strip = true
-lto = "thin"
+# Kein LTO: Das Linken mit LTO dominierte den Build des eigenen Codes im Docker-Image
+# (gemessen 68 s gegen 18 s bei gleich großem Binary). Siehe CLAUDE.md.
