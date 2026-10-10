@@ -11,6 +11,7 @@ axum-extra = { version = "0.12", features = ["cookie"] }
 dom_smoothie = "0.18.2"
 encoding_rs = "0.8.42"
 getrandom = "0.4"
+governor = { version = "0.10.4", default-features = false, features = ["std", "dashmap", "quanta"] }
 hex = "0.4"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "charset", "gzip", "brotli"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }

@@ -25,6 +25,8 @@ Die App läuft dann auf `http://<server>:8080`.
 
 **HTTPS und Cookies:** Im Heimnetz oder hinter Tailscale reicht HTTP. Bei Zugriff über eine Domain `SITE_ADDRESS=domain` setzen (Caddy holt dann ein Zertifikat, Port 80 und 443 müssen erreichbar sein, 443 in der Compose-Datei ergänzen) und `COOKIE_SECURE=true` setzen.
 
+**Ratenbegrenzung:** Das Backend bremst Anmeldeversuche, Registrierungen und Seitenabrufe pro IP, Konto und Benutzer und antwortet dann mit `429` und `Retry-After`. Sie ist standardmäßig an (`RATE_LIMIT_ENABLED=false` schaltet sie ab). Die Client-Adresse kommt aus `X-Forwarded-For` von Caddy, deshalb darf das Backend nur über Caddy erreichbar sein (in der Compose-Datei ist sein Port nicht veröffentlicht).
+
 **Registrierung:** Nach dem Anlegen der eigenen Konten `REGISTRATION_ENABLED=false` in `.env` setzen und `docker compose up -d` ausführen.
 
 ## Artikel aus anderen Apps teilen

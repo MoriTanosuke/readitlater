@@ -168,6 +168,9 @@ pub async fn save_article(
         return Err(already_saved());
     }
 
+    // Erst jetzt zählt der Aufruf: Duplikate und ungültige Adressen kosten keinen Abruf.
+    state.limits.check_fetch(user_id)?;
+
     let page = {
         let _slot = state
             .fetch_slots

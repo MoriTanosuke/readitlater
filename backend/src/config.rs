@@ -2,6 +2,8 @@
 
 use std::{env, str::FromStr};
 
+use crate::ratelimit::RateLimitConfig;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Pfad zur SQLite-Datei (`DATABASE_PATH`).
@@ -24,6 +26,9 @@ pub struct Config {
     pub fetch_max_bytes: usize,
     /// Maximal gleichzeitige Seitenabrufe (`FETCH_CONCURRENCY`).
     pub fetch_concurrency: usize,
+    /// Ratenbegrenzung (`RATE_LIMIT_ENABLED`, Standard: an). Die Werte der einzelnen
+    /// Stufen stehen in `ratelimit.rs`.
+    pub rate_limits: RateLimitConfig,
 }
 
 impl Default for Config {
@@ -38,6 +43,7 @@ impl Default for Config {
             fetch_timeout_secs: 15,
             fetch_max_bytes: 2 * 1024 * 1024,
             fetch_concurrency: 4,
+            rate_limits: RateLimitConfig::default(),
         }
     }
 }
@@ -55,6 +61,10 @@ impl Config {
             fetch_timeout_secs: env_positive("FETCH_TIMEOUT_SECS", defaults.fetch_timeout_secs),
             fetch_max_bytes: env_positive("FETCH_MAX_BYTES", defaults.fetch_max_bytes),
             fetch_concurrency: env_positive("FETCH_CONCURRENCY", defaults.fetch_concurrency),
+            rate_limits: RateLimitConfig {
+                enabled: env_bool("RATE_LIMIT_ENABLED", defaults.rate_limits.enabled),
+                ..defaults.rate_limits
+            },
         }
     }
 }

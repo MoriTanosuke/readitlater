@@ -45,6 +45,16 @@ async fn main() {
         }
     };
 
+    // Erholte Zähler der Ratenbegrenzung jede Minute entfernen.
+    let limits = state.limits.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            limits.purge();
+        }
+    });
+
     // Abgelaufene Sessions stündlich entfernen.
     let purge_state = state.clone();
     tokio::spawn(async move {
@@ -72,9 +82,14 @@ async fn main() {
         }
     );
 
-    if let Err(e) = axum::serve(listener, app(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+    // `ConnectInfo` liefert die Adresse der direkten Verbindung (Rückfall, wenn kein
+    // `X-Forwarded-For` vom Proxy kommt).
+    if let Err(e) = axum::serve(
+        listener,
+        app(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
     {
         tracing::error!("Server beendet mit Fehler: {e}");
         std::process::exit(1);

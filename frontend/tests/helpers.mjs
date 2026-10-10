@@ -69,6 +69,7 @@ export async function startBackend(env = {}) {
       REGISTRATION_ENABLED: 'true',
       COOKIE_SECURE: 'false',
       RUST_LOG: 'warn',
+      RATE_LIMIT_ENABLED: 'false',
       ...env,
     },
     stdio: ['ignore', 'inherit', 'inherit'],
