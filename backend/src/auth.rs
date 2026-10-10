@@ -310,7 +310,7 @@ fn dummy_hash() -> &'static str {
     DUMMY.get_or_init(|| hash_password("dummy-passwort-fuer-timing").unwrap_or_default())
 }
 
-fn token_hash(token: &str) -> String {
+pub(crate) fn token_hash(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 

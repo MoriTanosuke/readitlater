@@ -142,14 +142,25 @@ pub async fn create(
     user: AuthUser,
     ApiJson(body): ApiJson<NewArticle>,
 ) -> Result<(StatusCode, Json<ArticleSummary>), ApiError> {
-    let url = parse_url(&body.url)?;
+    let summary = save_article(&state, user.id, &body.url).await?;
+    Ok((StatusCode::CREATED, Json(summary)))
+}
+
+/// Lädt die Seite, extrahiert den Hauptinhalt und speichert ihn für den Benutzer.
+/// Gemeinsam genutzt von `POST /api/articles` und `POST /api/share`.
+pub async fn save_article(
+    state: &AppState,
+    user_id: i64,
+    raw_url: &str,
+) -> Result<ArticleSummary, ApiError> {
+    let url = parse_url(raw_url)?;
     state.fetcher.validate(&url).map_err(fetch_error)?;
     let normalized = url.as_str().to_owned();
 
     // Bekannte Adressen gar nicht erst laden.
     let existing: Option<i64> =
         sqlx::query_scalar("SELECT id FROM articles WHERE user_id = ? AND url = ?")
-            .bind(user.id)
+            .bind(user_id)
             .bind(&normalized)
             .fetch_optional(&state.pool)
             .await?;
@@ -177,7 +188,7 @@ pub async fn create(
          VALUES (?, ?, ?, ?, ?, ?) \
          RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags",
     )
-    .bind(user.id)
+    .bind(user_id)
     .bind(&normalized)
     .bind(&extracted.title)
     .bind(&extracted.content_html)
@@ -187,7 +198,7 @@ pub async fn create(
     .await;
 
     match inserted {
-        Ok(row) => Ok((StatusCode::CREATED, Json(row.into()))),
+        Ok(row) => Ok(row.into()),
         // Zwei gleichzeitige Anfragen für dieselbe Adresse.
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(already_saved()),
         Err(e) => Err(e.into()),

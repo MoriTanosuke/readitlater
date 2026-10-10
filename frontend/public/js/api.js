@@ -49,6 +49,9 @@ export const api = {
       new_password: newPassword,
     }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
+  listShareTokens: () => request('GET', '/share-tokens'),
+  createShareToken: (name) => request('POST', '/share-tokens', { name }),
+  deleteShareToken: (id) => request('DELETE', `/share-tokens/${encodeURIComponent(id)}`),
   /** filter: { q, read ('true' | 'false' | ''), tag } */
   listArticles: (limit, offset, filter = {}) => {
     const params = new URLSearchParams({ limit, offset });
