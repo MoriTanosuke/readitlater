@@ -523,3 +523,20 @@ async fn export_gibt_den_koerper_stueckweise_aus() {
     let doc: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(doc["articles"].as_array().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn import_lehnt_extrem_tief_verschachteltes_html_schnell_ab() {
+    let app = setup(true).await;
+    let a = register_cookie(&app, "a@example.org").await;
+    let tief = format!("{}x{}", "<div>".repeat(50_000), "</div>".repeat(50_000));
+    let entries = json!([
+        { "url": "https://example.org/tief", "content": tief, "content_text": "x" },
+        { "url": "https://example.org/normal", "content": "<p>Hallo</p>", "content_text": "Hallo" },
+    ]);
+    let start = std::time::Instant::now();
+    let r = import(&app, &a, file(entries)).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["imported"], 1);
+    assert_eq!(r.body["invalid"], 1);
+    assert!(start.elapsed().as_secs() < 10, "Import dauert zu lange");
+}
