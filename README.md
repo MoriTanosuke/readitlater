@@ -57,6 +57,10 @@ Die Schnittstelle akzeptiert die Adresse als JSON (`url` oder `text`), als Formu
 - **Android (HTTP Shortcuts):** Shortcut mit Methode `POST`, URL `https://<server>/api/share`, Header `Authorization: Bearer <Token>`, Body-Typ „Benutzerdefinierter Text“ (`text/plain`) mit der Variable für den geteilten Text. Die Variable muss den Wert aus dem Teilen-Dialog übernehmen, und der Shortcut muss im Teilen-Menü erscheinen. Die Bezeichnungen der Einstellungen unterscheiden sich je nach Version der App.
 - **iPad und iPhone (Kurzbefehle):** Neuer Kurzbefehl mit „Im Share Sheet anzeigen“ (Eingabe: URLs und Text), Aktion „Inhalte von URL abrufen“ mit der Schnittstellen-Adresse, Methode `POST`, Header `Authorization: Bearer <Token>` und als Anfragetext die „Kurzbefehleingabe“.
 
+## Darstellung anpassen
+
+Im Lesemodus öffnet der Knopf „Aa“ ein Bedienfeld, im Konto-Menü gibt es zusätzlich die Seite „Darstellung“ mit Vorschau. Einstellbar sind Schriftart (Systemschrift, Serif, breite Schrift, Monospace), Textgröße, Textbreite (Zeichen pro Zeile), Zeilenabstand, Farbschema (wie das Gerät, hell oder dunkel) und Kontrast (weich, normal, hoch, jeweils für Hell und Dunkel). Die Einstellungen gelten pro Gerät und Browser und funktionieren auch offline. „Zurücksetzen“ stellt die Voreinstellung her. Dafür braucht der Browser `light-dark()` (Chrome ab 123, Safari ab 17.5, Firefox ab 120).
+
 ## Markierungen und Notizen
 
 Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder einer eigenen Farbe markieren. Ein Klick auf eine Markierung öffnet das Bedienfeld: Farbe ändern, optionale Notiz schreiben, Markierung löschen. Notizen stehen neben dem Text (auf schmalen Bildschirmen darunter). „Markierungen ausblenden“ zeigt den Artikel ohne Farben und Notizen.

@@ -1,28 +1,55 @@
+/* Farben: light-dark() folgt dem Farbschema des Dokuments (color-scheme). Standard ist das
+   Gerät, über data-theme lässt sich Hell oder Dunkel erzwingen. data-contrast stellt den
+   Kontrast von Text und Rändern ein (js/reading.js). */
 :root {
-  --bg: #fafaf7;
-  --surface: #ffffff;
-  --text: #1d1d1b;
-  --muted: #6b6b66;
-  --border: #deded8;
-  --accent: #1b5e9e;
-  --accent-text: #ffffff;
-  --danger: #b3261e;
-  --radius: 10px;
   color-scheme: light dark;
+  --bg: light-dark(#fafaf7, #161615);
+  --surface: light-dark(#ffffff, #202020);
+  --text: light-dark(#1d1d1b, #ecece8);
+  --muted: light-dark(#6b6b66, #9a9a94);
+  --border: light-dark(#deded8, #36362f);
+  --accent: light-dark(#1b5e9e, #6fb0ef);
+  --accent-text: light-dark(#ffffff, #0d1b2a);
+  --danger: light-dark(#b3261e, #f2877f);
+  --radius: 10px;
+
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --reading-size: 1.0625rem;
+  --reading-leading: 1.7;
+  --reading-measure: 70; /* Zeichen pro Zeile */
+  --reading-font: var(--ui-font);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161615;
-    --surface: #202020;
-    --text: #ececE8;
-    --muted: #9a9a94;
-    --border: #36362f;
-    --accent: #6fb0ef;
-    --accent-text: #0d1b2a;
-    --danger: #f2877f;
-  }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* Weicher Kontrast: warmes Papier, gedämpfter Text. */
+:root[data-contrast="soft"] {
+  --bg: light-dark(#f3efe6, #1c1b1a);
+  --surface: light-dark(#faf7f0, #252422);
+  --text: light-dark(#3b3a36, #c8c6bf);
+  --muted: light-dark(#6d6b63, #98968e);
+  --border: light-dark(#d6d1c4, #3a3936);
+  --accent: light-dark(#2d5f8f, #7fb3e6);
+  --accent-text: light-dark(#ffffff, #0d1b2a);
+  --danger: light-dark(#a3362f, #e8918a);
 }
+
+/* Hoher Kontrast: reines Schwarz auf Weiß bzw. Weiß auf Schwarz, kräftige Ränder. */
+:root[data-contrast="high"] {
+  --bg: light-dark(#ffffff, #000000);
+  --surface: light-dark(#ffffff, #0d0d0d);
+  --text: light-dark(#000000, #ffffff);
+  --muted: light-dark(#3d3d3a, #d4d4cf);
+  --border: light-dark(#6b6b66, #8a8a82);
+  --accent: light-dark(#0a3d78, #9fd0ff);
+  --accent-text: light-dark(#ffffff, #000000);
+  --danger: light-dark(#8c1a14, #ffa39c);
+}
+
+:root[data-reading-font="serif"] { --reading-font: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif; }
+:root[data-reading-font="wide"] { --reading-font: Verdana, Geneva, "DejaVu Sans", sans-serif; }
+:root[data-reading-font="mono"] { --reading-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 * { box-sizing: border-box; }
 
@@ -32,7 +59,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 1rem/1.5 var(--ui-font);
 }
 
 #app {
@@ -179,10 +206,42 @@ a { color: var(--accent); }
 /* Lesemodus */
 .reader-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 1rem; min-height: 2.75rem; }
 .reader-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; white-space: nowrap; }
-#reader-title { overflow-wrap: anywhere; line-height: 1.25; }
+#reader-title { overflow-wrap: anywhere; line-height: 1.25; font-size: 1.5em; }
 #reader-meta { margin-top: -0.5rem; font-size: 0.875rem; }
 
-.prose { font-size: 1.0625rem; line-height: 1.7; overflow-wrap: anywhere; }
+.prose { overflow-wrap: anywhere; }
+
+/* Lesespalte: Schriftart, Größe, Zeilenabstand und Breite kommen aus den Leseeinstellungen. */
+.reading-scope {
+  max-width: calc(var(--reading-measure) * 1ch);
+  margin-inline: auto;
+  font-family: var(--reading-font);
+  font-size: var(--reading-size);
+  line-height: var(--reading-leading);
+}
+/* Bedienelemente behalten die Oberflächenschrift und -größe. */
+.reading-scope .reader-nav, .reading-scope .tags-form, .reading-scope .reading-panel {
+  font-family: var(--ui-font);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+#app:has(#view-reader:not([hidden])), #app:has(#view-display:not([hidden])) { max-width: none; }
+
+/* Leseeinstellungen */
+.page-narrow { max-width: 40rem; margin-inline: auto; }
+.reading-panel {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.reading-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.875rem 1.25rem; margin-bottom: 0.75rem; }
+.reading-head { display: flex; justify-content: space-between; gap: 0.5rem; }
+.reading-value { color: var(--muted); font-variant-numeric: tabular-nums; }
+.reading-field input[type="range"] { min-height: 2.75rem; padding: 0; accent-color: var(--accent); }
+.reading-sample { margin: 1.5rem auto; }
+.reading-sample h2 { font-size: 1.25em; margin: 0 0 0.5rem; }
 .prose img { max-width: 100%; height: auto; border-radius: 6px; }
 .prose figure { margin: 1rem 0; }
 .prose figcaption { color: var(--muted); font-size: 0.875rem; }

@@ -21,6 +21,7 @@ const SHELL = [
   '/js/app.js',
   '/js/highlights.js',
   '/js/offline.js',
+  '/js/reading.js',
   '/js/safe-html.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
