@@ -1,10 +1,11 @@
 import { api, ApiError } from './api.js';
 import { createHighlighter } from './highlights.js';
 import * as offline from './offline.js';
+import { mountControls } from './reading.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline', 'display'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 const SLOW_MS = 2500; // so lange wartet die Liste auf den Server, bevor gespeicherte Artikel erscheinen
@@ -34,6 +35,7 @@ const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthE
 
 function show(view) {
   if (view !== 'reader') highlighter.reset();
+  if (view !== 'reader') setReadingPanel(false);
   for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
 }
 
@@ -429,6 +431,7 @@ function route() {
   if (match) openReader(Number(match[1]));
   else if (location.hash === '#/account/share') openSharePage();
   else if (location.hash === '#/account/data') openDataPage();
+  else if (location.hash === '#/account/display') openDisplayPage();
   else if (location.hash === '#/account/offline') openOfflinePage();
   else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
   else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
@@ -900,6 +903,37 @@ $('reader-delete').addEventListener('click', async () => {
     route();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Darstellung (#/account/display) und Bedienfeld „Aa“ im Lesemodus (js/reading.js)
+// ---------------------------------------------------------------------------
+
+mountControls($('display-controls'));
+mountControls($('reading-panel'));
+
+function setReadingPanel(open) {
+  $('reading-panel').hidden = !open;
+  $('reading-toggle').setAttribute('aria-expanded', String(open));
+}
+
+$('reading-toggle').addEventListener('click', () => {
+  setReadingPanel($('reading-panel').hidden);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || $('reading-panel').hidden) return;
+  setReadingPanel(false);
+  $('reading-toggle').focus();
+});
+
+function openDisplayPage() {
+  routeToken += 1;
+  readerArticle = null;
+  document.title = `Darstellung – ${APP_TITLE}`;
+  show('display');
+  window.scrollTo(0, 0);
+  $('display-controls').querySelector('select, input').focus();
+}
 
 // ---------------------------------------------------------------------------
 // Offline-Lesen (#/account/offline)

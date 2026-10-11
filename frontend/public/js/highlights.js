@@ -278,8 +278,16 @@ export function createHighlighter({ api, onAuthError }) {
     return [...content.querySelectorAll(`mark.hl[data-id="${Number(id)}"]`)];
   }
 
+  /** Passen die Randnotizen noch neben den Text? (Bei breitem Text und schmalem Fenster nicht.) */
+  function hasRoomForMargin() {
+    const body = notes.parentElement?.getBoundingClientRect();
+    if (!body || body.width === 0) return true; // ohne Layout (z. B. Tests) gilt nur die Fensterbreite
+    const rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+    return document.documentElement.clientWidth - body.right >= 16 * rem;
+  }
+
   function layoutNotes() {
-    const wide = Boolean(window.matchMedia?.(WIDE_QUERY).matches);
+    const wide = Boolean(window.matchMedia?.(WIDE_QUERY).matches) && hasRoomForMargin();
     notes.classList.toggle('notes-margin', wide);
     const cards = [...notes.querySelectorAll('.note')];
     if (!wide) {
@@ -527,6 +535,8 @@ export function createHighlighter({ api, onAuthError }) {
   });
 
   window.addEventListener('resize', () => layoutNotes());
+  // Schrift, Größe oder Breite ändern die Lage der Markierungen (js/reading.js).
+  window.addEventListener('leseliste:display', () => layoutNotes());
   // Bilder verschieben den Text nach unten, wenn sie fertig geladen sind.
   content.addEventListener('load', () => layoutNotes(), true);
 

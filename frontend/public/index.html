@@ -57,6 +57,7 @@
               <span id="user-email" class="user-email"></span><span aria-hidden="true">▾</span>
             </button>
             <ul id="user-menu" class="menu" hidden>
+              <li><a href="#/account/display">Darstellung</a></li>
               <li><a href="#/account/share">Teilen aus Apps</a></li>
               <li><a href="#/account/offline">Offline-Lesen</a></li>
               <li><a href="#/account/data">Export und Import</a></li>
@@ -234,15 +235,40 @@
       </form>
     </section>
 
+    <section id="view-display" hidden>
+      <div class="page-narrow">
+        <h1>Darstellung</h1>
+        <p>Stelle ein, wie Artikel angezeigt werden und wie die App aussieht. Die Einstellungen
+          gelten nur für dieses Gerät und stehen auch im Lesemodus unter „Aa“ bereit.</p>
+        <div id="display-controls" class="reading-panel"></div>
+        <div class="form-actions">
+          <a href="#/" class="button-link">Zurück zur Liste</a>
+        </div>
+      </div>
+      <div class="reading-scope reading-sample">
+        <h2>Vorschau</h2>
+        <div class="prose">
+          <p>Lesen soll mühelos sein. Dieser Absatz zeigt, wie ein Artikel mit deinen Einstellungen
+            aussieht: Schrift, Größe, Zeilenabstand, Breite und Kontrast.</p>
+          <p>Kurze Zeilen lesen sich ruhiger, lange Zeilen zeigen mehr Text auf einmal. Ein größerer
+            Zeilenabstand hilft vielen Menschen, nicht in der Zeile zu verrutschen. Probiere aus,
+            was für deine Augen am besten passt.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="view-reader" hidden>
+      <div class="reading-scope">
       <nav class="reader-nav">
         <a href="#/" id="reader-back">← Zur Liste</a>
         <div class="reader-actions">
+          <button type="button" id="reading-toggle" aria-expanded="false" aria-controls="reading-panel" aria-label="Darstellung anpassen" title="Darstellung anpassen">Aa</button>
           <button type="button" id="hl-toggle" aria-pressed="false" hidden>Markierungen ausblenden</button>
           <button type="button" id="reader-toggle-read" hidden></button>
           <button type="button" id="reader-delete" class="danger-btn" hidden>Löschen</button>
         </div>
       </nav>
+      <div id="reading-panel" class="reading-panel" role="group" aria-label="Darstellung" hidden></div>
       <article>
         <h1 id="reader-title"></h1>
         <p id="reader-meta" class="muted"></p>
@@ -260,6 +286,7 @@
           <aside id="reader-notes" class="notes" aria-label="Notizen" hidden></aside>
         </div>
       </article>
+      </div>
       <div id="hl-panel" class="hl-panel" role="group" aria-label="Markierung" hidden>
         <button type="button" id="hl-close" class="hl-close" aria-label="Schließen">✕</button>
         <p id="hl-title" class="hl-title"></p>

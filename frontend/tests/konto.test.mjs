@@ -37,6 +37,7 @@ test('Benutzermenü, Passwort ändern und Konto löschen', async (t) => {
   assert.deepEqual(
     [...$('user-menu').querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
     [
+      ['Darstellung', '#/account/display'],
       ['Teilen aus Apps', '#/account/share'],
       ['Offline-Lesen', '#/account/offline'],
     ['Export und Import', '#/account/data'],
