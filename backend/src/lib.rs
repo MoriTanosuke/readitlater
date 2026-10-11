@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 pub mod extract;
 pub mod fetch;
+pub mod highlights;
 pub mod ratelimit;
 pub mod share;
 pub mod tags;
@@ -20,7 +21,7 @@ use axum::{
     http::Method,
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use sqlx::SqlitePool;
 use tokio::sync::Semaphore;
@@ -83,6 +84,14 @@ pub fn app(state: AppState) -> Router {
             get(articles::show)
                 .patch(articles::update)
                 .delete(articles::remove),
+        )
+        .route(
+            "/articles/{id}/highlights",
+            get(highlights::list).post(highlights::create),
+        )
+        .route(
+            "/highlights/{id}",
+            patch(highlights::update).delete(highlights::remove),
         )
         .route("/tags", get(tags::list))
         .route("/export", get(transfer::export))

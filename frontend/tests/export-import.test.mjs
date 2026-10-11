@@ -46,6 +46,12 @@ test('Export herunterladen und in einem anderen Konto importieren', async (t) =>
     body: JSON.stringify({ tags: ['Test', 'Export'], is_read: true }),
   });
   assert.equal(patch.status, 200);
+  const hl = await fetch(`/api/articles/${saved.id}/highlights`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start: 0, end: 4, quote: 'Dies', color: '#abcdef', note: 'Meine Notiz' }),
+  });
+  assert.equal(hl.status, 201);
 
   // Seite: Link ist ein normaler Download, keine Skripte oder Werkzeuge nötig
   window.location.hash = '#/account/data';
@@ -68,6 +74,8 @@ test('Export herunterladen und in einem anderen Konto importieren', async (t) =>
   assert.equal(doc.articles[0].title, 'E2E Testartikel');
   assert.deepEqual(doc.articles[0].tags, ['Export', 'Test']);
   assert.equal(doc.articles[0].is_read, true);
+  assert.equal(doc.articles[0].highlights.length, 1);
+  assert.equal(doc.articles[0].highlights[0].note, 'Meine Notiz');
   assert.equal(text.includes('a@example.org'), false, 'keine E-Mail-Adresse in der Datei');
   ok('Datei enthält Artikel mit Schlagwörtern und Status, aber keine Kontodaten');
 
@@ -81,9 +89,16 @@ test('Export herunterladen und in einem anderen Konto importieren', async (t) =>
   choose(new window.File([text], 'leseliste-export.json', { type: 'application/json' }));
   submitData();
   await until(() => visible('data-result'), 'Ergebnis des Imports');
-  assert.equal($('data-result').textContent, 'Fertig: 1 importiert, 0 schon vorhanden.');
+  assert.equal($('data-result').textContent, 'Fertig: 1 importiert, 0 schon vorhanden, 1 Markierung.');
   assert.equal($('data-error').hidden, true);
   ok('Import meldet das Ergebnis');
+  const imported = (await (await fetch('/api/articles')).json())[0];
+  const importedHighlights = await (await fetch(`/api/articles/${imported.id}/highlights`)).json();
+  assert.equal(importedHighlights.length, 1);
+  assert.equal(importedHighlights[0].quote, 'Dies');
+  assert.equal(importedHighlights[0].color, '#abcdef');
+  assert.equal(importedHighlights[0].note, 'Meine Notiz');
+  ok('Markierung und Notiz kommen im anderen Konto an');
 
   // Zweiter Import derselben Datei ändert nichts
   choose(new window.File([text], 'leseliste-export.json', { type: 'application/json' }));

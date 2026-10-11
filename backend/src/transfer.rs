@@ -22,10 +22,13 @@ use futures_util::stream;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
-use crate::{AppState, articles, auth::AuthUser, error::ApiError, extract, tags};
+use crate::{AppState, articles, auth::AuthUser, error::ApiError, extract, highlights, tags};
 
 pub const FORMAT: &str = "leseliste-export";
-pub const VERSION: u32 = 1;
+/// Aktuelle Version der Datei. Version 2 kam mit den Markierungen hinzu; Version 1 (ohne
+/// Markierungen) lässt sich weiterhin einlesen.
+pub const VERSION: u32 = 2;
+const MIN_VERSION: u32 = 1;
 /// Größte erlaubte Importdatei in Bytes.
 pub const MAX_IMPORT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_IMPORT_ARTICLES: usize = 20_000;
@@ -54,12 +57,24 @@ struct ExportRow {
     #[sqlx(rename = "tags")]
     #[serde(rename = "tags", serialize_with = "serialize_tags")]
     tags_json: String,
+    #[sqlx(rename = "highlights")]
+    #[serde(rename = "highlights", serialize_with = "serialize_highlights")]
+    highlights_json: String,
 }
 
 /// Schlagwörter kommen aus SQLite als JSON-Array-Text und werden als Array ausgegeben.
 fn serialize_tags<S: serde::Serializer>(json: &str, serializer: S) -> Result<S::Ok, S::Error> {
     let tags: Vec<String> = serde_json::from_str(json).unwrap_or_default();
     serializer.collect_seq(tags)
+}
+
+/// Markierungen kommen aus SQLite als JSON-Array-Text und werden als Array ausgegeben.
+fn serialize_highlights<S: serde::Serializer>(
+    json: &str,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let items: Vec<serde_json::Value> = serde_json::from_str(json).unwrap_or_default();
+    serializer.collect_seq(items)
 }
 
 enum Phase {
@@ -173,7 +188,13 @@ async fn export_batch(
                 a.created_at, \
                 (SELECT json_group_array(name) FROM ( \
                     SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
-                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags, \
+                (SELECT json_group_array(json_object( \
+                    'start', start_offset, 'end', end_offset, 'quote', quote, \
+                    'prefix', prefix, 'suffix', suffix, 'color', color, 'note', note, \
+                    'created_at', created_at)) FROM ( \
+                    SELECT * FROM highlights WHERE article_id = a.id \
+                    ORDER BY start_offset, id)) AS highlights \
          FROM articles a WHERE a.user_id = ? AND a.id > ? ORDER BY a.id LIMIT ?",
     )
     .bind(user_id)
@@ -210,6 +231,9 @@ struct ImportArticle {
     created_at: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    /// Einzeln geprüft: ein kaputter Eintrag soll nicht die ganze Datei ungültig machen.
+    #[serde(default)]
+    highlights: Vec<serde_json::Value>,
 }
 
 struct Prepared {
@@ -221,6 +245,8 @@ struct Prepared {
     is_read: bool,
     created_at: Option<String>,
     tags: Vec<String>,
+    highlights: Vec<highlights::Clean>,
+    highlights_invalid: usize,
 }
 
 #[derive(Serialize, Debug)]
@@ -231,6 +257,10 @@ pub struct ImportResult {
     duplicates: usize,
     /// Einträge, die nicht übernommen werden konnten (z. B. ungültige Adresse).
     invalid: usize,
+    /// Markierungen, die mit neu angelegten Artikeln übernommen wurden.
+    highlights: usize,
+    /// Markierungen, die ungültig waren oder über der Höchstzahl lagen.
+    highlights_invalid: usize,
 }
 
 fn bad_file() -> ApiError {
@@ -257,7 +287,7 @@ pub async fn import(
     if file.format != FORMAT {
         return Err(bad_file());
     }
-    if file.version != VERSION {
+    if !(MIN_VERSION..=VERSION).contains(&file.version) {
         return Err(ApiError::BadRequest(format!(
             "Die Version {} der Exportdatei wird nicht unterstützt",
             file.version
@@ -282,6 +312,8 @@ pub async fn import(
         imported: 0,
         duplicates: 0,
         invalid: total - prepared.len(),
+        highlights: 0,
+        highlights_invalid: 0,
     };
 
     let mut tx = state.pool.begin().await?;
@@ -305,6 +337,28 @@ pub async fn import(
         match id {
             Some(id) => {
                 tags::attach(&mut tx, user.id, id, &article.tags).await?;
+                for h in &article.highlights {
+                    sqlx::query(
+                        "INSERT INTO highlights (user_id, article_id, start_offset, end_offset, \
+                             quote, prefix, suffix, color, note, created_at) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \
+                             COALESCE(?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')))",
+                    )
+                    .bind(user.id)
+                    .bind(id)
+                    .bind(h.start)
+                    .bind(h.end)
+                    .bind(&h.quote)
+                    .bind(&h.prefix)
+                    .bind(&h.suffix)
+                    .bind(&h.color)
+                    .bind(&h.note)
+                    .bind(&h.created_at)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                result.highlights += article.highlights.len();
+                result.highlights_invalid += article.highlights_invalid;
                 result.imported += 1;
             }
             None => result.duplicates += 1,
@@ -343,7 +397,17 @@ fn prepare(raw: ImportArticle) -> Option<Prepared> {
     } else {
         truncate(&title, MAX_TITLE_CHARS)
     };
+    let raw_count = raw.highlights.len();
+    let highlights: Vec<highlights::Clean> = raw
+        .highlights
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<highlights::HighlightInput>(v).ok())
+        .filter_map(|h| highlights::validate(h).ok())
+        .take(highlights::MAX_PER_ARTICLE)
+        .collect();
     Some(Prepared {
+        highlights_invalid: raw_count - highlights.len(),
+        highlights,
         url: url.as_str().to_owned(),
         title,
         excerpt: truncate(&collapse(&raw.excerpt), MAX_EXCERPT_CHARS),
@@ -370,7 +434,7 @@ fn truncate(text: &str, max: usize) -> String {
 }
 
 /// Erwartet das Format, das die App selbst schreibt: `2026-10-11T08:30:00Z`.
-fn valid_timestamp(value: &str) -> bool {
+pub(crate) fn valid_timestamp(value: &str) -> bool {
     let b = value.as_bytes();
     b.len() == 20
         && b.iter().enumerate().all(|(i, c)| match i {
@@ -405,6 +469,7 @@ mod tests {
             is_read: true,
             created_at: Some("2026-01-02T03:04:05Z".into()),
             tags: vec!["Rust".into(), "a,b".into(), "rust".into()],
+            highlights: Vec::new(),
         }
     }
 
