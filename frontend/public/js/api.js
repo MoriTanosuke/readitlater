@@ -69,4 +69,13 @@ export const api = {
   addArticle: (url) => request('POST', '/articles', { url }),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
   deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),
+  listHighlights: (articleId) =>
+    request('GET', `/articles/${encodeURIComponent(articleId)}/highlights`),
+  /** highlight: { start, end, quote, prefix, suffix, color, note? } */
+  createHighlight: (articleId, highlight) =>
+    request('POST', `/articles/${encodeURIComponent(articleId)}/highlights`, highlight),
+  /** changes: { color?, note? } (note: null löscht die Notiz) */
+  updateHighlight: (id, changes) =>
+    request('PATCH', `/highlights/${encodeURIComponent(id)}`, changes),
+  deleteHighlight: (id) => request('DELETE', `/highlights/${encodeURIComponent(id)}`),
 };

@@ -200,6 +200,7 @@
       <nav class="reader-nav">
         <a href="#/" id="reader-back">← Zur Liste</a>
         <div class="reader-actions">
+          <button type="button" id="hl-toggle" aria-pressed="false" hidden>Markierungen ausblenden</button>
           <button type="button" id="reader-toggle-read" hidden></button>
           <button type="button" id="reader-delete" class="danger-btn" hidden>Löschen</button>
         </div>
@@ -215,8 +216,27 @@
         </form>
         <p id="tags-error" class="error" role="alert" hidden></p>
         <p id="reader-error" class="error" role="alert" hidden></p>
-        <div id="reader-content" class="prose"></div>
+        <div class="reader-body">
+          <div id="reader-content" class="prose"></div>
+          <aside id="reader-notes" class="notes" aria-label="Notizen" hidden></aside>
+        </div>
       </article>
+      <div id="hl-panel" class="hl-panel" role="group" aria-label="Markierung" hidden>
+        <button type="button" id="hl-close" class="hl-close" aria-label="Schließen">✕</button>
+        <p id="hl-title" class="hl-title"></p>
+        <p id="hl-quote" class="hl-quote"></p>
+        <div id="hl-colors" class="hl-colors" role="group" aria-label="Farbe"></div>
+        <div id="hl-edit" hidden>
+          <label>Notiz (optional)
+            <textarea id="hl-note" rows="3" maxlength="2000" placeholder="Gedanken zu dieser Stelle"></textarea>
+          </label>
+          <div class="hl-buttons">
+            <button type="button" id="hl-save">Notiz speichern</button>
+            <button type="button" id="hl-delete" class="danger-btn">Markierung löschen</button>
+          </div>
+        </div>
+        <p id="hl-error" class="error" role="alert" hidden></p>
+      </div>
     </section>
 
   </main>

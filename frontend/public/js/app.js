@@ -1,4 +1,5 @@
 import { api, ApiError } from './api.js';
+import { createHighlighter } from './highlights.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,11 +20,14 @@ let pendingNotice = ''; // einmalige Meldung für die Liste (z. B. nach Passwort
 let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
 
+const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthError(error) });
+
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
 
 function show(view) {
+  if (view !== 'reader') highlighter.reset();
   for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
 }
 
@@ -225,6 +229,12 @@ $('form-data').addEventListener('submit', async (event) => {
     const parts = [`${result.imported} importiert`];
     parts.push(`${result.duplicates} schon vorhanden`);
     if (result.invalid > 0) parts.push(`${result.invalid} nicht übernommen`);
+    if (result.highlights > 0) {
+      parts.push(`${result.highlights} ${result.highlights === 1 ? 'Markierung' : 'Markierungen'}`);
+    }
+    if (result.highlights_invalid > 0) {
+      parts.push(`${result.highlights_invalid} Markierungen nicht übernommen`);
+    }
     $('data-result').textContent = `Fertig: ${parts.join(', ')}.`;
     $('data-result').hidden = false;
   } catch (error) {
@@ -642,6 +652,7 @@ async function openReader(id) {
   $('reader-title').textContent = '';
   $('reader-meta').replaceChildren();
   $('reader-content').replaceChildren();
+  highlighter.reset();
   $('reader-delete').hidden = true;
   $('reader-toggle-read').hidden = true;
   $('form-tags').hidden = true;
@@ -672,6 +683,7 @@ async function openReader(id) {
     $('reader-delete').hidden = false;
     updateReaderControls();
     $('form-tags').hidden = false;
+    highlighter.open(article.id); // Fehler zeigt das Bedienfeld, der Artikel bleibt lesbar
   } catch (error) {
     if (token !== routeToken) return;
     if (handleAuthError(error)) return;

@@ -55,7 +55,7 @@ async fn import(app: &TestApp, cookie: &str, file: Value) -> Reply {
 }
 
 fn file(articles: Value) -> Value {
-    json!({ "format": "leseliste-export", "version": 1, "articles": articles })
+    json!({ "format": "leseliste-export", "version": 2, "articles": articles })
 }
 
 #[tokio::test]
@@ -91,7 +91,7 @@ async fn export_enthaelt_nur_eigene_daten_und_ist_ein_normaler_download() {
 
     let doc = &reply.body;
     assert_eq!(doc["format"], "leseliste-export");
-    assert_eq!(doc["version"], 1);
+    assert_eq!(doc["version"], 2);
     assert!(doc["exported_at"].as_str().unwrap().ends_with('Z'));
     let articles = doc["articles"].as_array().unwrap();
     assert_eq!(articles.len(), 1);
@@ -102,6 +102,7 @@ async fn export_enthaelt_nur_eigene_daten_und_ist_ein_normaler_download() {
     assert_eq!(articles[0]["is_read"], true);
     assert_eq!(articles[0]["created_at"], "2026-03-04T05:06:07Z");
     assert_eq!(articles[0]["tags"], json!(["Rust", "Web"]));
+    assert_eq!(articles[0]["highlights"], json!([]));
 
     // Weder fremde Daten noch Konto- oder Zugangsdaten.
     let text = doc.to_string();
@@ -204,7 +205,7 @@ async fn export_und_import_ergeben_dieselben_daten_in_einem_neuen_konto() {
     assert_eq!(result.status, StatusCode::OK, "{:?}", result.body);
     assert_eq!(
         result.body,
-        json!({ "imported": 2, "duplicates": 0, "invalid": 0 })
+        json!({ "imported": 2, "duplicates": 0, "invalid": 0, "highlights": 0, "highlights_invalid": 0 })
     );
 
     // Gleiche Artikel, Schlagwörter, Lesestatus und Zeitpunkte; Export von B == Export von A.
@@ -259,7 +260,7 @@ async fn zweiter_import_ueberschreibt_nichts() {
     let result = import(&app, &a, exported).await;
     assert_eq!(
         result.body,
-        json!({ "imported": 0, "duplicates": 1, "invalid": 0 })
+        json!({ "imported": 0, "duplicates": 1, "invalid": 0, "highlights": 0, "highlights_invalid": 0 })
     );
     let now = export(&app, &a).await.body;
     assert_eq!(now["articles"][0]["tags"], json!(["neu"]));
@@ -282,13 +283,13 @@ async fn duplikate_werden_pro_benutzer_und_ohne_fragment_erkannt() {
     let r = import(&app, &b, file(entries.clone())).await;
     assert_eq!(
         r.body,
-        json!({ "imported": 1, "duplicates": 1, "invalid": 0 })
+        json!({ "imported": 1, "duplicates": 1, "invalid": 0, "highlights": 0, "highlights_invalid": 0 })
     );
     // A hat sie schon.
     let r = import(&app, &a, file(entries)).await;
     assert_eq!(
         r.body,
-        json!({ "imported": 0, "duplicates": 2, "invalid": 0 })
+        json!({ "imported": 0, "duplicates": 2, "invalid": 0, "highlights": 0, "highlights_invalid": 0 })
     );
 }
 
@@ -319,7 +320,7 @@ async fn importierte_daten_werden_nicht_ungeprueft_uebernommen() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
     assert_eq!(
         r.body,
-        json!({ "imported": 2, "duplicates": 0, "invalid": 4 })
+        json!({ "imported": 2, "duplicates": 0, "invalid": 4, "highlights": 0, "highlights_invalid": 0 })
     );
 
     let exported = export(&app, &a).await.body;
@@ -357,7 +358,8 @@ async fn falsche_dateien_werden_abgelehnt_und_aendern_nichts() {
     let a = register_cookie(&app, "a@example.org").await;
     let bad = [
         json!({ "format": "pocket", "version": 1, "articles": [] }),
-        json!({ "format": "leseliste-export", "version": 2, "articles": [] }),
+        json!({ "format": "leseliste-export", "version": 3, "articles": [] }),
+        json!({ "format": "leseliste-export", "version": 0, "articles": [] }),
         json!({ "format": "leseliste-export", "version": 1 }),
         json!([1, 2, 3]),
         json!({ "format": "leseliste-export", "version": 1, "articles": [{ "title": "ohne url" }] }),
@@ -442,7 +444,7 @@ async fn import_braucht_login_csrf_header_und_hat_eigene_groessengrenzen() {
     .await;
     assert_eq!(
         r.body,
-        json!({ "imported": 0, "duplicates": 0, "invalid": 1 })
+        json!({ "imported": 0, "duplicates": 0, "invalid": 1, "highlights": 0, "highlights_invalid": 0 })
     );
 }
 
@@ -460,7 +462,7 @@ async fn import_laedt_nichts_aus_dem_netz() {
     .await;
     assert_eq!(
         r.body,
-        json!({ "imported": 1, "duplicates": 0, "invalid": 0 })
+        json!({ "imported": 1, "duplicates": 0, "invalid": 0, "highlights": 0, "highlights_invalid": 0 })
     );
 }
 

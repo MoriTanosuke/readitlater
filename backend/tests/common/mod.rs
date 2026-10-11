@@ -147,6 +147,7 @@ pub async fn count(pool: &SqlitePool, table: &str) -> i64 {
         "articles" => "SELECT COUNT(*) FROM articles",
         "tags" => "SELECT COUNT(*) FROM tags",
         "article_tags" => "SELECT COUNT(*) FROM article_tags",
+        "highlights" => "SELECT COUNT(*) FROM highlights",
         other => panic!("unbekannte Tabelle: {other}"),
     };
     sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()

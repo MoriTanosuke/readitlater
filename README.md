@@ -46,9 +46,15 @@ Die Schnittstelle akzeptiert die Adresse als JSON (`url` oder `text`), als Formu
 - **Android (HTTP Shortcuts):** Shortcut mit Methode `POST`, URL `https://<server>/api/share`, Header `Authorization: Bearer <Token>`, Body-Typ „Benutzerdefinierter Text“ (`text/plain`) mit der Variable für den geteilten Text. Die Variable muss den Wert aus dem Teilen-Dialog übernehmen, und der Shortcut muss im Teilen-Menü erscheinen. Die Bezeichnungen der Einstellungen unterscheiden sich je nach Version der App.
 - **iPad und iPhone (Kurzbefehle):** Neuer Kurzbefehl mit „Im Share Sheet anzeigen“ (Eingabe: URLs und Text), Aktion „Inhalte von URL abrufen“ mit der Schnittstellen-Adresse, Methode `POST`, Header `Authorization: Bearer <Token>` und als Anfragetext die „Kurzbefehleingabe“.
 
+## Markierungen und Notizen
+
+Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder einer eigenen Farbe markieren. Ein Klick auf eine Markierung öffnet das Bedienfeld: Farbe ändern, optionale Notiz schreiben, Markierung löschen. Notizen stehen neben dem Text (auf schmalen Bildschirmen darunter). „Markierungen ausblenden“ zeigt den Artikel ohne Farben und Notizen.
+
 ## Export und Import
 
 Im Konto-Menü unter „Export und Import“ lädt ein Klick auf „Alle Artikel herunterladen“ eine einzelne JSON-Datei mit den eigenen Artikeln (Adresse, Titel, Inhalt, Schlagwörter, Gelesen-Status). Es braucht nur den Browser, keine Entpackprogramme. Die Datei enthält keine Kontodaten.
+
+Markierungen und Notizen gehören zu den Artikeln und sind in der Datei enthalten.
 
 Importiert werden nur Dateien, die diese App selbst exportiert hat (maximal 64 MiB, 20.000 Artikel). Beim Import wird nichts aus dem Internet geladen, der Inhalt wird neu bereinigt, und bereits vorhandene Artikel (gleiche Adresse) bleiben unverändert. Es gibt keine Kompatibilität mit anderen Diensten.
 
