@@ -8,7 +8,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, body) {
+/** raw: body ist schon fertig (z. B. eine Datei) und wird unverändert als JSON gesendet. */
+async function request(method, path, body, raw = false) {
   const headers = { 'X-Requested-With': 'fetch' }; // CSRF-Schutz im Backend
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -17,7 +18,7 @@ async function request(method, path, body) {
     response = await fetch(`/api${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || raw ? body : JSON.stringify(body),
       credentials: 'same-origin',
     });
   } catch {
@@ -49,6 +50,8 @@ export const api = {
       new_password: newPassword,
     }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
+  /** file: ausgewählte Exportdatei, der Browser sendet sie direkt. */
+  importArticles: (file) => request('POST', '/import', file, true),
   listShareTokens: () => request('GET', '/share-tokens'),
   createShareToken: (name) => request('POST', '/share-tokens', { name }),
   deleteShareToken: (id) => request('DELETE', `/share-tokens/${encodeURIComponent(id)}`),

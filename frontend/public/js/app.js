@@ -2,7 +2,7 @@ import { api, ApiError } from './api.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 
@@ -191,6 +191,53 @@ function backToList(notice = '') {
   location.replace('#/');
 }
 
+// Export und Import (#/account/data)
+
+const MAX_IMPORT_BYTES = 64 * 1024 * 1024; // wie im Backend
+
+function openDataPage() {
+  openAccountPage('data', 'Export und Import');
+  $('data-result').hidden = true;
+}
+
+$('form-data').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  clearError($('data-error'));
+  $('data-result').hidden = true;
+  const file = form.elements.file.files[0];
+  if (!file) {
+    showError($('data-error'), 'Bitte eine Datei auswählen.');
+    return;
+  }
+  if (file.size > MAX_IMPORT_BYTES) {
+    showError($('data-error'), 'Die Datei ist größer als 64 MiB und kann nicht importiert werden.');
+    return;
+  }
+  try {
+    const result = await withBusy(form.querySelector('button[type="submit"]'), () =>
+      api.importArticles(file),
+    );
+    form.reset();
+    // Die Liste und die Schlagwörter müssen neu geladen werden.
+    listLoaded = false;
+    tagsStale = true;
+    const parts = [`${result.imported} importiert`];
+    parts.push(`${result.duplicates} schon vorhanden`);
+    if (result.invalid > 0) parts.push(`${result.invalid} nicht übernommen`);
+    $('data-result').textContent = `Fertig: ${parts.join(', ')}.`;
+    $('data-result').hidden = false;
+  } catch (error) {
+    if (handleAuthError(error)) return;
+    showError(
+      $('data-error'),
+      error instanceof ApiError && error.status === 413
+        ? 'Die Datei ist zu groß.'
+        : error.message,
+    );
+  }
+});
+
 // Share-Tokens (#/account/share)
 
 function renderShareTokens(list) {
@@ -319,6 +366,7 @@ function route() {
   const match = /^#\/article\/(\d+)$/.exec(location.hash);
   if (match) openReader(Number(match[1]));
   else if (location.hash === '#/account/share') openSharePage();
+  else if (location.hash === '#/account/data') openDataPage();
   else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
   else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
   else openList();

@@ -66,6 +66,54 @@ pub fn normalize(raw: &[String]) -> Result<Vec<String>, ApiError> {
     Ok(result)
 }
 
+/// Wie `normalize`, überspringt aber ungültige Schlagwörter, statt abzulehnen, und
+/// behält höchstens die ersten erlaubten (für den Import, die Datei ist nicht vertrauenswürdig).
+pub fn normalize_lenient(raw: &[String]) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    for name in raw {
+        let Ok(valid) = normalize(std::slice::from_ref(name)) else {
+            continue;
+        };
+        for tag in valid {
+            if result.len() < MAX_TAGS_PER_ARTICLE
+                && !result
+                    .iter()
+                    .any(|t| t.to_lowercase() == tag.to_lowercase())
+            {
+                result.push(tag);
+            }
+        }
+    }
+    result
+}
+
+/// Fügt einem Artikel Schlagwörter hinzu (fehlende werden für den Benutzer angelegt).
+pub async fn attach(
+    conn: &mut SqliteConnection,
+    user_id: i64,
+    article_id: i64,
+    names: &[String],
+) -> Result<(), ApiError> {
+    for name in names {
+        // Die Spalte name ist NOCASE: „Rust“ und „rust“ sind dasselbe Schlagwort.
+        sqlx::query("INSERT INTO tags (user_id, name) VALUES (?, ?) ON CONFLICT DO NOTHING")
+            .bind(user_id)
+            .bind(name)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query(
+            "INSERT OR IGNORE INTO article_tags (article_id, tag_id) \
+             SELECT ?, id FROM tags WHERE user_id = ? AND name = ?",
+        )
+        .bind(article_id)
+        .bind(user_id)
+        .bind(name)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Ersetzt die Schlagwörter eines Artikels (der Artikel gehört dem Benutzer,
 /// das prüft der Aufrufer) und räumt nicht mehr verwendete Schlagwörter auf.
 pub async fn replace(
@@ -78,23 +126,7 @@ pub async fn replace(
         .bind(article_id)
         .execute(&mut *conn)
         .await?;
-    for name in names {
-        // Die Spalte name ist NOCASE: „Rust“ und „rust“ sind dasselbe Schlagwort.
-        sqlx::query("INSERT INTO tags (user_id, name) VALUES (?, ?) ON CONFLICT DO NOTHING")
-            .bind(user_id)
-            .bind(name)
-            .execute(&mut *conn)
-            .await?;
-        sqlx::query(
-            "INSERT INTO article_tags (article_id, tag_id) \
-             SELECT ?, id FROM tags WHERE user_id = ? AND name = ?",
-        )
-        .bind(article_id)
-        .bind(user_id)
-        .bind(name)
-        .execute(&mut *conn)
-        .await?;
-    }
+    attach(&mut *conn, user_id, article_id, names).await?;
     sqlx::query(
         "DELETE FROM tags WHERE user_id = ? \
          AND id NOT IN (SELECT tag_id FROM article_tags)",

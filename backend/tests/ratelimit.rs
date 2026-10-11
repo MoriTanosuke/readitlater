@@ -33,6 +33,8 @@ fn wide() -> RateLimitConfig {
         login_email: WIDE,
         password_user: WIDE,
         fetch_user: WIDE,
+        export_user: WIDE,
+        import_user: WIDE,
     }
 }
 
