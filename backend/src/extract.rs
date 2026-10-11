@@ -6,6 +6,10 @@ use url::Url;
 /// Obergrenze für Elemente im Dokument; schützt vor extrem aufgeblähten Seiten.
 const MAX_ELEMENTS: usize = 30_000;
 /// Weniger lesbarer Text gilt als „kein Artikel“.
+/// Größte erlaubte Verschachtelungstiefe. Echte Seiten liegen weit darunter (meist < 60);
+/// bei tausenden geschachtelten Elementen braucht die Extraktion Minuten CPU-Zeit
+/// (gemessen: 5.000 Ebenen > 2 Minuten, siehe `exceeds_max_depth`) und kann den Stack überlaufen lassen.
+const MAX_DEPTH: usize = 256;
 const MIN_TEXT_CHARS: usize = 40;
 const MAX_TITLE_CHARS: usize = 300;
 const MAX_EXCERPT_CHARS: usize = 300;
@@ -28,7 +32,97 @@ pub enum ExtractError {
     TooComplex,
 }
 
+/// Elemente ohne Ende-Tag oder mit optionalem Ende-Tag: Sie schachteln im HTML-Parser nicht
+/// (ein neues `<li>` schließt das alte), zählen also nicht zur Tiefe.
+const FLAT_TAGS: &[&str] = &[
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
+    "wbr", "p", "li", "dt", "dd", "tr", "td", "th", "thead", "tbody", "tfoot", "colgroup",
+    "option", "optgroup", "rt", "rp", "param",
+];
+/// Elemente, deren Inhalt als reiner Text gilt (dort ist `<` kein Tag).
+const RAW_TEXT_TAGS: &[&str] = &["script", "style", "textarea", "title"];
+
+/// Prüft vor der Extraktion, ob das Dokument zu tief verschachtelt ist.
+///
+/// Das Parsen selbst ist bei tausenden Ebenen schon quadratisch teuer (gemessen: 25.000
+/// Ebenen brauchen im Debug-Build über 30 s), darum geht das nicht über einen echten Parser.
+/// Stattdessen läuft ein einfacher Durchgang in linearer Zeit über die Tags und zählt offene
+/// minus geschlossene Elemente. Er ist bewusst grob: Nicht geschlossene Tags (`<span>` ohne
+/// Ende) zählen als offen und können eine kaputte Seite ablehnen, was hier gewollt ist.
+pub fn exceeds_max_depth(html: &str) -> bool {
+    let b = html.as_bytes();
+    let mut i = 0;
+    let mut depth = 0usize;
+    while let Some(off) = b[i..].iter().position(|&c| c == b'<') {
+        i += off + 1;
+        let rest = &b[i..];
+        if rest.starts_with(b"!--") {
+            i += find(&b[i..], b"-->").map_or(b.len() - i, |p| p + 3);
+            continue;
+        }
+        if matches!(rest.first(), Some(b'!' | b'?')) {
+            i += find(rest, b">").map_or(rest.len(), |p| p + 1);
+            continue;
+        }
+        let closing = rest.first() == Some(&b'/');
+        let name_start = i + usize::from(closing);
+        let name_len = b[name_start.min(b.len())..]
+            .iter()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .count();
+        if name_len == 0 {
+            continue; // „<“ als Text
+        }
+        let name = html[name_start..name_start + name_len].to_ascii_lowercase();
+        i = name_start + name_len;
+        // Ende des Tags suchen, `>` in Anführungszeichen überspringen.
+        let mut quote = 0u8;
+        while i < b.len() {
+            let c = b[i];
+            i += 1;
+            match (quote, c) {
+                (0, b'>') => break,
+                (0, b'"' | b'\'') => quote = c,
+                (q, c) if q != 0 && q == c => quote = 0,
+                _ => {}
+            }
+        }
+        if FLAT_TAGS.contains(&name.as_str()) {
+            continue;
+        }
+        if closing {
+            depth = depth.saturating_sub(1);
+            continue;
+        }
+        depth += 1;
+        if depth > MAX_DEPTH {
+            return true;
+        }
+        if RAW_TEXT_TAGS.contains(&name.as_str()) {
+            // Inhalt bis zum passenden Ende-Tag überspringen; das Ende-Tag selbst schließt.
+            let close = format!("</{name}");
+            let skipped = find_ci(&b[i..], close.as_bytes()).unwrap_or(b.len() - i);
+            i += skipped;
+            depth -= 1;
+        }
+    }
+    false
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+fn find_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|w| w.eq_ignore_ascii_case(needle))
+}
+
 pub fn extract(html: &str, url: &Url) -> Result<Extracted, ExtractError> {
+    if exceeds_max_depth(html) {
+        return Err(ExtractError::TooComplex);
+    }
     let config = Config {
         max_elements_to_parse: MAX_ELEMENTS,
         ..Config::default()
@@ -176,5 +270,56 @@ mod tests {
     fn kuerzen_beachtet_zeichen_statt_bytes() {
         assert_eq!(truncate_chars("äöü", 5), "äöü");
         assert_eq!(truncate_chars("äöüäöü", 4), "äöü…");
+    }
+
+    fn nested(depth: usize) -> String {
+        format!(
+            "<html><body>{}{}{}</body></html>",
+            "<div>".repeat(depth),
+            paragraphs(),
+            "</div>".repeat(depth)
+        )
+    }
+
+    #[test]
+    fn tiefenpruefung_kommt_mit_kaputtem_html_und_rohtext_klar() {
+        // Unvollständige Tags, Kommentare, Skripte mit „<“ und viele nicht geschlossene <li>/<p>.
+        let flach = format!(
+            "<!-- <div><div> --><script>if (a<b) {{ x('<div>') }}</script><ul>{}</ul><p>a<p>b<br><img alt=\"a>b\">< 3 <",
+            "<li>Punkt".repeat(2_000)
+        );
+        assert!(!exceeds_max_depth(&flach));
+        assert!(!exceeds_max_depth(""));
+        assert!(!exceeds_max_depth("<div"));
+        assert!(exceeds_max_depth(&"<div>".repeat(MAX_DEPTH + 1)));
+        assert!(!exceeds_max_depth(&"<div>".repeat(MAX_DEPTH)));
+    }
+
+    #[test]
+    fn normale_verschachtelung_ist_erlaubt() {
+        let out = extract(&nested(100), &base()).unwrap();
+        assert!(out.content_text.contains("ausführlicher Absatz"));
+    }
+
+    #[test]
+    fn extrem_tiefe_seiten_werden_schnell_abgelehnt() {
+        let start = std::time::Instant::now();
+        for depth in [MAX_DEPTH + 10, 5_000, 25_000] {
+            assert_eq!(
+                extract(&nested(depth), &base()).unwrap_err(),
+                ExtractError::TooComplex,
+                "Tiefe {depth}"
+            );
+        }
+        assert!(start.elapsed().as_secs() < 10, "Prüfung dauert zu lange");
+    }
+
+    #[test]
+    fn tiefe_ohne_schliessende_tags_wird_abgelehnt() {
+        let html = format!("<html><body>{}<p>Text</p>", "<span>".repeat(20_000));
+        assert_eq!(
+            extract(&html, &base()).unwrap_err(),
+            ExtractError::TooComplex
+        );
     }
 }

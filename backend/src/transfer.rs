@@ -397,6 +397,10 @@ fn prepare(raw: ImportArticle) -> Option<Prepared> {
     } else {
         truncate(&title, MAX_TITLE_CHARS)
     };
+    // Extrem tief verschachteltes HTML macht die Bereinigung quadratisch teuer: ungültig.
+    if extract::exceeds_max_depth(&raw.content) {
+        return None;
+    }
     let raw_count = raw.highlights.len();
     let highlights: Vec<highlights::Clean> = raw
         .highlights
