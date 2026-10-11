@@ -4,7 +4,7 @@ Read-it-later-App mit Rust-Backend (axum, SQLite) und Frontend aus reinem HTML, 
 
 ## Ablauf
 
-1. Push auf `main` startet den Workflow `.github/workflows/build.yml`. Er prüft das Backend (fmt, clippy, Tests) und das Frontend (jsdom-Tests gegen das gebaute Backend) und baut zwei Images nach ghcr.io: `ghcr.io/<benutzer>/<repo>-backend` und `...-web`.
+1. Push auf `main` startet den Workflow `.github/workflows/build.yml`. Er prüft das Backend (fmt, clippy, Tests) und das Frontend (jsdom-Tests gegen das gebaute Backend) und baut ein Image nach ghcr.io: `ghcr.io/<benutzer>/<repo>`. Das Frontend steckt im Binary, es gibt nur diesen einen Container.
 2. Auf dem Server holt Watchtower neue Images (Prüfintervall 5 Minuten) und startet die Container neu.
 3. In Pull Requests werden Tests und Image-Build ausgeführt, aber nichts veröffentlicht.
 
@@ -17,15 +17,26 @@ cp .env.example .env      # GITHUB_REPO=benutzer/repo (Kleinbuchstaben) eintrage
 docker compose up -d
 ```
 
-Die App läuft dann auf `http://<server>:8080`.
+Der Container veröffentlicht keinen Port. Er hängt im Docker-Netz deines vorhandenen Caddy (`PROXY_NETWORK` in `.env`, Netz muss existieren). Im Caddyfile genügt:
+
+```
+lesen.example.org {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+```
+
+(Läuft Caddy nicht im selben Netz, den Containernamen bzw. die Adresse anpassen.) Caddy kümmert sich um HTTPS und Komprimierung, die Sicherheits-Header setzt die App selbst.
 
 **Images in ghcr.io:** Pakete aus privaten Repositories sind privat. Entweder das Paket in den GitHub-Paketeinstellungen auf „public“ stellen oder auf dem Server `docker login ghcr.io` (Token mit `read:packages`) ausführen und in der Compose-Datei die auskommentierte `config.json`-Zeile bei Watchtower aktivieren.
 
 **Watchtower:** Das Original `containrrr/watchtower` ist seit Dezember 2025 archiviert. Die Compose-Datei nutzt den Fork `ghcr.io/nicholas-fedor/watchtower`. Prüfe nach dem ersten Start mit `docker compose logs watchtower`, ob er die Label-Filterung und das Polling wie erwartet übernimmt.
 
-**HTTPS und Cookies:** Im Heimnetz oder hinter Tailscale reicht HTTP. Bei Zugriff über eine Domain `SITE_ADDRESS=domain` setzen (Caddy holt dann ein Zertifikat, Port 80 und 443 müssen erreichbar sein, 443 in der Compose-Datei ergänzen) und `COOKIE_SECURE=true` setzen.
+**HTTPS und Cookies:** `COOKIE_SECURE` steht standardmäßig auf `true` (Caddy terminiert HTTPS). Nur ohne HTTPS (reiner Test im Heimnetz) auf `false` setzen.
 
-**Ratenbegrenzung:** Das Backend bremst Anmeldeversuche, Registrierungen und Seitenabrufe pro IP, Konto und Benutzer und antwortet dann mit `429` und `Retry-After`. Sie ist standardmäßig an (`RATE_LIMIT_ENABLED=false` schaltet sie ab). Die Client-Adresse kommt aus `X-Forwarded-For` von Caddy, deshalb darf das Backend nur über Caddy erreichbar sein (in der Compose-Datei ist sein Port nicht veröffentlicht).
+**Umstieg vom Setup mit zwei Containern:** Die Dienste `backend` und `web` gibt es nicht mehr, die alten Images `...-backend` und `...-web` werden nicht mehr gebaut. Neue `docker-compose.yml` und `.env.example` übernehmen (`WEB_PORT` und `SITE_ADDRESS` entfallen), `docker compose up -d --remove-orphans` ausführen und im Caddy auf `reverse_proxy app:3000` umstellen. Compose-Projektname und Volume bleiben gleich, die Daten sind also weiter da. Zur Sicherheit vorher sichern (siehe Datensicherung).
+
+**Ratenbegrenzung:** Das Backend bremst Anmeldeversuche, Registrierungen und Seitenabrufe pro IP, Konto und Benutzer und antwortet dann mit `429` und `Retry-After`. Sie ist standardmäßig an (`RATE_LIMIT_ENABLED=false` schaltet sie ab). Die Client-Adresse kommt aus `X-Forwarded-For` vom vorgeschalteten Caddy, deshalb darf das Backend nur über ihn erreichbar sein (in der Compose-Datei ist kein Port veröffentlicht).
 
 **Registrierung:** Nach dem Anlegen der eigenen Konten `REGISTRATION_ENABLED=false` in `.env` setzen und `docker compose up -d` ausführen.
 
@@ -54,7 +65,7 @@ Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder ein
 
 Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“ bzw. „App installieren“) und gespeicherte Artikel auch ohne Internet lesen, zum Beispiel im Zug.
 
-**Wichtig: Das funktioniert nur über HTTPS.** Browser erlauben den dafür nötigen Service Worker nur auf `localhost` und auf HTTPS-Adressen. Mit der Standardeinstellung (HTTP auf Port 80, z. B. im Heimnetz) läuft die App normal, aber ohne Installation und ohne Start ohne Netz. Setze dafür `SITE_ADDRESS` auf deine Domain (Caddy holt das Zertifikat selbst, siehe oben) und `COOKIE_SECURE=true`. Hinter Tailscale geht es mit `tailscale serve` und dem HTTPS-Namen des Geräts.
+**Wichtig: Das funktioniert nur über HTTPS.** Browser erlauben den dafür nötigen Service Worker nur auf `localhost` und auf HTTPS-Adressen. Über reines HTTP (z. B. im Heimnetz ohne Proxy) läuft die App normal, aber ohne Installation und ohne Start ohne Netz. Dein Caddy mit einer Domain und Zertifikat erfüllt das. Hinter Tailscale geht es mit `tailscale serve` und dem HTTPS-Namen des Geräts. Lokal funktioniert `http://localhost:3000`.
 
 - Das Gerät speichert die 30 neuesten ungelesenen Artikel samt Markierungen und Notizen und jeden Artikel, den du geöffnet hast (14 Tage, höchstens 30). Der Abgleich läuft beim Öffnen der Liste im Hintergrund, unter „Offline-Lesen“ im Konto-Menü lässt er sich auch von Hand starten, ausschalten oder löschen.
 - Ohne Verbindung (oder bei sehr schlechter) siehst du die gespeicherten Artikel, kannst sie lesen, durchsuchen und als gelesen markieren. Das Markieren wird nachgeholt, sobald wieder Verbindung besteht. Neue Artikel speichern, Schlagwörter, Markierungen und Notizen ändern braucht eine Verbindung.
@@ -81,7 +92,8 @@ docker run --rm -v readitlater_app-data:/data -v "$PWD":/backup alpine \
 ## Lokal ausprobieren
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build   # http://localhost:8080
-# oder nur das Backend:
-cd backend && cargo test && cargo run
+cd backend
+DATABASE_PATH=./data/app.db RATE_LIMIT_ENABLED=false COOKIE_SECURE=false cargo run   # http://localhost:3000
 ```
+
+Ein Prozess liefert Frontend und Schnittstelle. Im Debug-Build wird `frontend/public` von der Platte gelesen, Änderungen sieht man nach dem Neuladen. Das Image lokal bauen: `docker build -t leseliste .` im Repository-Wurzelverzeichnis.

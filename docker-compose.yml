@@ -1,31 +1,22 @@
-# Compose-Datei für den Server. Die Images baut GitHub Actions nach ghcr.io,
+# Compose-Datei für den Server. Das Image baut GitHub Actions nach ghcr.io,
 # Watchtower holt neue Versionen automatisch.
 # Einmalig: .env aus .env.example anlegen (GITHUB_REPO setzen), dann `docker compose up -d`.
 name: readitlater
 
 services:
-  backend:
-    image: ghcr.io/${GITHUB_REPO:-owner/repo}-backend:latest
+  app:
+    image: ghcr.io/${GITHUB_REPO:-owner/repo}:latest
     restart: unless-stopped
+    # Kein veröffentlichter Port: Das Backend darf nur über den Reverse-Proxy (Caddy)
+    # erreichbar sein, weil die Ratenbegrenzung dem letzten X-Forwarded-For-Eintrag vertraut.
     environment:
       REGISTRATION_ENABLED: "${REGISTRATION_ENABLED:-true}"
-      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
       RUST_LOG: "${RUST_LOG:-info}"
     volumes:
       - app-data:/data # hier liegt die SQLite-Datei
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-
-  web:
-    image: ghcr.io/${GITHUB_REPO:-owner/repo}-web:latest
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "${WEB_PORT:-8080}:80"
-    environment:
-      SITE_ADDRESS: "${SITE_ADDRESS:-:80}"
+    networks:
+      - proxy
     labels:
       - com.centurylinklabs.watchtower.enable=true
 
@@ -41,6 +32,12 @@ services:
       # Nur nötig, wenn die Images in ghcr.io privat sind: vorher auf dem Server
       # `docker login ghcr.io` ausführen (Token mit read:packages) und die Zeile aktivieren.
       # - /root/.docker/config.json:/config.json:ro
+
+networks:
+  # Gemeinsames Netz mit dem vorhandenen Caddy-Container (Name in .env: PROXY_NETWORK).
+  proxy:
+    name: ${PROXY_NETWORK:-proxy}
+    external: true
 
 volumes:
   app-data:

@@ -1,4 +1,4 @@
-// Dünner Wrapper um fetch für die Backend-API (gleiche Origin über Caddy).
+// Dünner Wrapper um fetch für die Backend-API (gleiche Origin, das Backend liefert auch das Frontend).
 
 export class ApiError extends Error {
   constructor(status, message) {

@@ -189,7 +189,7 @@ impl Limits {
     }
 }
 
-/// Ermittelt die Client-Adresse. Das Backend ist nur über Caddy erreichbar, und Caddy
+/// Ermittelt die Client-Adresse. Das Backend ist nur über einen vorgeschalteten Proxy (Caddy) erreichbar, und der
 /// setzt `X-Forwarded-For` auf die echte Adresse. Wir nehmen den letzten Eintrag, also den,
 /// den der nächste Proxy angehängt hat. Vom Client mitgeschickte Werte stehen davor und
 /// werden ignoriert. Ohne Header gilt die Adresse der direkten Verbindung.
