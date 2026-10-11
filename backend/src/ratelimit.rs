@@ -10,6 +10,7 @@
 //! | `login_email` | E-Mail | `auth::login` (Obergrenze gegen verteilte Angriffe) |
 //! | `password_user` | Benutzer | Passwort ändern, Konto löschen |
 //! | `fetch_user` | Benutzer | `articles::save_article` (Speichern und Teilen) |
+//! | `export_user`, `import_user` | Benutzer | `transfer::export`, `transfer::import` |
 //!
 //! Die Prüfung ist ein Hash-Zugriff und kostet Nanosekunden. Sie steht immer vor dem
 //! Parsen des Bodys, der Authentifizierung und dem Hashing. Die Zahl der E-Mail-Schlüssel
@@ -72,6 +73,8 @@ pub struct RateLimitConfig {
     pub login_email: Rule,
     pub password_user: Rule,
     pub fetch_user: Rule,
+    pub export_user: Rule,
+    pub import_user: Rule,
 }
 
 impl Default for RateLimitConfig {
@@ -90,6 +93,9 @@ impl Default for RateLimitConfig {
             password_user: Rule::new(5, 60),
             // Seitenabrufe pro Benutzer: 10 sofort, danach einer alle 6 Sekunden.
             fetch_user: Rule::new(10, 6),
+            // Export: 5 sofort, danach einer pro Minute. Import: 3 sofort, danach einer alle 10 min.
+            export_user: Rule::new(5, 60),
+            import_user: Rule::new(3, 600),
         }
     }
 }
@@ -106,6 +112,8 @@ pub struct Limits {
     login_email: Keyed<String>,
     password_user: Keyed<i64>,
     fetch_user: Keyed<i64>,
+    export_user: Keyed<i64>,
+    import_user: Keyed<i64>,
 }
 
 impl Limits {
@@ -118,6 +126,8 @@ impl Limits {
             login_email: RateLimiter::keyed(config.login_email.quota()),
             password_user: RateLimiter::keyed(config.password_user.quota()),
             fetch_user: RateLimiter::keyed(config.fetch_user.quota()),
+            export_user: RateLimiter::keyed(config.export_user.quota()),
+            import_user: RateLimiter::keyed(config.import_user.quota()),
         }
     }
 
@@ -150,6 +160,14 @@ impl Limits {
         self.check(&self.fetch_user, &user_id)
     }
 
+    pub fn check_export(&self, user_id: i64) -> Result<(), ApiError> {
+        self.check(&self.export_user, &user_id)
+    }
+
+    pub fn check_import(&self, user_id: i64) -> Result<(), ApiError> {
+        self.check(&self.import_user, &user_id)
+    }
+
     /// Entfernt Einträge, deren Zähler sich erholt haben.
     pub fn purge(&self) {
         self.general.retain_recent();
@@ -164,6 +182,10 @@ impl Limits {
         self.password_user.shrink_to_fit();
         self.fetch_user.retain_recent();
         self.fetch_user.shrink_to_fit();
+        self.export_user.retain_recent();
+        self.export_user.shrink_to_fit();
+        self.import_user.retain_recent();
+        self.import_user.shrink_to_fit();
     }
 }
 

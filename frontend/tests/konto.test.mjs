@@ -38,6 +38,7 @@ test('Benutzermenü, Passwort ändern und Konto löschen', async (t) => {
     [...$('user-menu').querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
     [
       ['Teilen aus Apps', '#/account/share'],
+      ['Export und Import', '#/account/data'],
       ['Passwort ändern', '#/account/password'],
       ['Konto löschen', '#/account/delete'],
     ],

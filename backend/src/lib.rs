@@ -10,6 +10,7 @@ pub mod fetch;
 pub mod ratelimit;
 pub mod share;
 pub mod tags;
+pub mod transfer;
 
 use std::{sync::Arc, time::Duration};
 
@@ -34,6 +35,8 @@ pub struct AppState {
     pub fetcher: Arc<Fetcher>,
     /// Begrenzt die gleichzeitigen Seitenabrufe.
     pub fetch_slots: Arc<Semaphore>,
+    /// Es läuft höchstens ein Import gleichzeitig.
+    pub import_slot: Arc<Semaphore>,
     /// Ratenbegrenzung (nur im Speicher).
     pub limits: Arc<ratelimit::Limits>,
 }
@@ -49,6 +52,7 @@ impl AppState {
             pool,
             fetcher: Arc::new(fetcher),
             fetch_slots: Arc::new(Semaphore::new(config.fetch_concurrency)),
+            import_slot: Arc::new(Semaphore::new(1)),
             limits: Arc::new(ratelimit::Limits::new(config.rate_limits)),
             config: Arc::new(config),
         })
@@ -81,6 +85,12 @@ pub fn app(state: AppState) -> Router {
                 .delete(articles::remove),
         )
         .route("/tags", get(tags::list))
+        .route("/export", get(transfer::export))
+        // Eigenes, größeres Limit für die Importdatei (überschreibt das allgemeine).
+        .route(
+            "/import",
+            post(transfer::import).layer(DefaultBodyLimit::max(transfer::MAX_IMPORT_BYTES)),
+        )
         .route(
             "/share-tokens",
             get(share::list_tokens).post(share::create_token),

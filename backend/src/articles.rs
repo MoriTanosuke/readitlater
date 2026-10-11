@@ -401,7 +401,7 @@ pub async fn remove(
 
 /// Eingabe zu einer URL aufbereiten: ohne Schema wird `https://` ergänzt,
 /// das Fragment (`#...`) entfällt, damit dieselbe Seite nicht doppelt gespeichert wird.
-fn parse_url(input: &str) -> Result<Url, ApiError> {
+pub(crate) fn parse_url(input: &str) -> Result<Url, ApiError> {
     let trimmed = input.trim();
     if trimmed.is_empty() || trimmed.len() > MAX_URL_LEN {
         return Err(invalid_url());

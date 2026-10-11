@@ -130,7 +130,10 @@ export async function openApp(backendUrl) {
     inFlight += 1;
     try {
       const headers = { ...init.headers, ...(cookie ? { cookie } : {}) };
-      const response = await realFetch(backendUrl + route, { ...init, headers });
+      // jsdom-Blobs/Dateien kennt das Node-fetch nicht: vorher in Bytes umwandeln.
+      let reqBody = init.body;
+      if (reqBody instanceof window.Blob) reqBody = await readBlob(window, reqBody);
+      const response = await realFetch(backendUrl + route, { ...init, body: reqBody, headers });
       for (const header of response.headers.getSetCookie()) {
         const pair = header.split(';')[0];
         cookie = pair.endsWith('=') ? '' : pair;
@@ -206,3 +209,13 @@ export async function setup(pages = {}) {
 
 /** Gibt Schritt-Meldungen im Testbericht aus. */
 export const steps = (t) => (text) => t.diagnostic(text);
+
+/** Liest einen jsdom-Blob vollständig als Bytes. */
+function readBlob(window, blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(blob);
+  });
+}

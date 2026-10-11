@@ -44,6 +44,7 @@
             </button>
             <ul id="user-menu" class="menu" hidden>
               <li><a href="#/account/share">Teilen aus Apps</a></li>
+              <li><a href="#/account/data">Export und Import</a></li>
               <li><a href="#/account/password">Passwort ändern</a></li>
               <li><a href="#/account/delete" class="menu-danger">Konto löschen</a></li>
             </ul>
@@ -79,6 +80,32 @@
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
+    </section>
+
+    <section id="view-data" hidden>
+      <h1>Export und Import</h1>
+
+      <h2>Export</h2>
+      <p>Lädt alle deine Artikel als eine Datei herunter: Adresse, Titel, Volltext, Schlagwörter,
+        Gelesen-Status und Speicherdatum. Die Datei enthält nur deine eigenen Daten. Du brauchst
+        dafür kein weiteres Programm, der Browser speichert sie wie jeden anderen Download.</p>
+      <p><a id="export-link" class="button-link" href="/api/export" download>Alle Artikel herunterladen</a></p>
+
+      <h2>Import</h2>
+      <p>Spielt eine Datei ein, die diese App exportiert hat. Artikel mit einer Adresse, die du
+        schon gespeichert hast, bleiben unverändert. Beim Import werden keine Seiten aus dem
+        Internet geladen, und der Text wird noch einmal bereinigt.</p>
+      <form id="form-data">
+        <label>Exportdatei
+          <input type="file" name="file" accept=".json,application/json" required>
+        </label>
+        <p id="data-error" class="error" role="alert" hidden></p>
+        <p id="data-result" class="success" role="status" hidden></p>
+        <div class="form-actions">
+          <button type="submit" class="primary">Importieren</button>
+          <a href="#/" class="button-link">Zurück zur Liste</a>
+        </div>
+      </form>
     </section>
 
     <section id="view-share" hidden>
