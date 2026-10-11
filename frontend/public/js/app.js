@@ -1,11 +1,14 @@
 import { api, ApiError } from './api.js';
 import { createHighlighter } from './highlights.js';
+import * as offline from './offline.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
+const SLOW_MS = 2500; // so lange wartet die Liste auf den Server, bevor gespeicherte Artikel erscheinen
+const BOOT_SLOW_MS = 3000; // dasselbe beim Start der App
 
 let mode = 'login'; // 'login' | 'register'
 let currentUser = null;
@@ -19,6 +22,9 @@ let tagsStale = true;
 let pendingNotice = ''; // einmalige Meldung für die Liste (z. B. nach Passwortänderung)
 let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
+let offlineView = false; // zeigt die App gerade gespeicherte statt aktuelle Daten?
+let lastSync = 0; // Zeitpunkt (ms) des letzten Abgleichs mit dem Server
+let pendingShare = takeSharedUrl(); // Adresse, die per „Teilen“ an die App gesendet wurde
 
 const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthError(error) });
 
@@ -71,6 +77,41 @@ function element(tag, className, text) {
   return node;
 }
 
+/** Blendet den Hinweis „keine oder schlechte Verbindung“ ein oder aus. */
+function setOfflineBanner(on) {
+  offlineView = on;
+  $('offline-banner').hidden = !on;
+}
+
+/** Fehler „Server nicht erreichbar“ (Status 0)? Dann hilft der Offline-Speicher. */
+function isUnreachable(error) {
+  return error instanceof ApiError && error.status === 0;
+}
+
+function showNotice(text) {
+  const notice = $('home-notice');
+  notice.textContent = text;
+  notice.hidden = !text;
+}
+
+/**
+ * Die Teilen-Funktion des Betriebssystems ruft die App mit ?url=…&text=…&title=… auf (Web Share
+ * Target). Gesucht wird die erste http(s)-Adresse; die Parameter verschwinden aus der Adresszeile.
+ */
+function takeSharedUrl() {
+  const params = new URLSearchParams(location.search);
+  let found = '';
+  for (const key of ['url', 'text', 'title']) {
+    const match = /https?:\/\/[^\s<>"']+/i.exec(params.get(key) ?? '');
+    if (match) {
+      found = match[0];
+      break;
+    }
+  }
+  if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+  return found;
+}
+
 function resetHash() {
   history.replaceState(null, '', location.pathname + location.search);
 }
@@ -85,6 +126,9 @@ function handleAuthError(error) {
 }
 
 function endSession() {
+  offline.clearAll(); // gespeicherte Artikel gehören zur Sitzung und verschwinden mit ihr
+  setOfflineBanner(false);
+  lastSync = 0;
   currentUser = null;
   articles = [];
   hasMore = false;
@@ -131,12 +175,14 @@ $('form-auth').addEventListener('submit', async (event) => {
       mode === 'login' ? api.login(email, password) : api.register(email, password),
     );
     form.reset();
+    await offline.adopt(user); // Daten eines anderen Benutzers werden hier verworfen
     currentUser = user;
     articles = [];
     listLoaded = false;
     tagsStale = true;
     resetHash();
     route();
+    savePendingShare();
   } catch (error) {
     showError($('auth-error'), error.message);
   }
@@ -145,9 +191,15 @@ $('form-auth').addEventListener('submit', async (event) => {
 $('btn-logout').addEventListener('click', async () => {
   try {
     await api.logout();
-  } finally {
-    endSession();
+  } catch (error) {
+    if (isUnreachable(error)) {
+      // Ohne Verbindung ließe sich die Sitzung nicht beenden: dann lieber angemeldet bleiben.
+      showError($('list-error'), 'Abmelden geht nur mit Internetverbindung, damit die Sitzung wirklich beendet wird.');
+      return;
+    }
+    // Andere Fehler (z. B. Sitzung schon abgelaufen): lokal trotzdem abmelden.
   }
+  endSession();
 });
 
 // ---------------------------------------------------------------------------
@@ -377,6 +429,7 @@ function route() {
   if (match) openReader(Number(match[1]));
   else if (location.hash === '#/account/share') openSharePage();
   else if (location.hash === '#/account/data') openDataPage();
+  else if (location.hash === '#/account/offline') openOfflinePage();
   else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
   else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
   else openList();
@@ -414,18 +467,60 @@ async function loadArticles(reset) {
   clearError($('list-error'));
   const token = ++listToken;
   const offset = reset ? 0 : articles.length;
+  // Bei schlechter Verbindung nicht ewig leer bleiben: nach kurzer Zeit erscheinen die
+  // gespeicherten Artikel, die Serverliste ersetzt sie, sobald sie da ist.
+  const slow = reset && articles.length === 0 ? setTimeout(() => showStoredList(token), SLOW_MS) : 0;
   try {
     const page = await api.listArticles(PAGE_SIZE, offset, filter);
+    clearTimeout(slow);
     if (token !== listToken) return; // Filter wurde inzwischen geändert
+    setOfflineBanner(false);
     articles = reset ? page : articles.concat(page);
     hasMore = page.length === PAGE_SIZE;
     listLoaded = true;
     renderList();
+    if (reset) scheduleSync();
   } catch (error) {
+    clearTimeout(slow);
     if (token !== listToken) return;
     if (handleAuthError(error)) return;
+    if (isUnreachable(error) && (await showStoredList(token))) return;
     showError($('list-error'), error.message);
   }
+}
+
+/** Zeigt die gespeicherten Artikel (mit dem aktuellen Filter). Liefert false, wenn es keine gibt. */
+async function showStoredList(token) {
+  if ((await offline.count()) === 0) return false;
+  const stored = await offline.list(filter);
+  if (token !== listToken || !currentUser) return true;
+  clearError($('list-error'));
+  setOfflineBanner(true);
+  articles = stored;
+  hasMore = false;
+  listLoaded = false; // beim nächsten Besuch wieder beim Server nachfragen
+  renderList();
+  if (tagsStale || tags.length === 0) {
+    tags = await offline.tagCounts();
+    renderTags();
+  }
+  return true;
+}
+
+/** Gleicht den Offline-Speicher im Hintergrund ab (höchstens alle fünf Minuten). */
+function scheduleSync(force = false) {
+  if (!currentUser || (!force && Date.now() - lastSync < 5 * 60 * 1000)) return Promise.resolve(null);
+  lastSync = Date.now();
+  return offline
+    .sync(api)
+    .then((result) => {
+      if (result.offline) lastSync = 0; // beim nächsten Mal erneut versuchen
+      return result;
+    })
+    .catch((error) => {
+      handleAuthError(error);
+      return null;
+    });
 }
 
 async function loadTags() {
@@ -439,7 +534,12 @@ async function loadTags() {
     }
     renderTags();
   } catch (error) {
-    handleAuthError(error); // andere Fehler: die Liste funktioniert auch ohne Leiste
+    if (handleAuthError(error)) return;
+    if (isUnreachable(error)) {
+      tags = await offline.tagCounts(); // ohne Verbindung: Schlagwörter der gespeicherten Artikel
+      renderTags();
+    }
+    // andere Fehler: die Liste funktioniert auch ohne Leiste
   }
 }
 
@@ -496,10 +596,12 @@ $('filter-read').addEventListener('change', () => {
 function renderList() {
   $('article-list').replaceChildren(...articles.map(articleItem));
   const empty = $('list-empty');
-  empty.textContent = filterActive()
-    ? 'Keine passenden Artikel gefunden.'
-    : 'Noch keine Artikel. Füge oben eine Adresse ein.';
-  empty.hidden = articles.length > 0 || !listLoaded;
+  empty.textContent = offlineView
+    ? 'Keine passenden gespeicherten Artikel.'
+    : filterActive()
+      ? 'Keine passenden Artikel gefunden.'
+      : 'Noch keine Artikel. Füge oben eine Adresse ein.';
+  empty.hidden = articles.length > 0 || (!listLoaded && !offlineView);
   $('btn-more').hidden = !hasMore;
 }
 
@@ -580,6 +682,15 @@ async function toggleRead(article, button) {
     renderList();
   } catch (error) {
     if (handleAuthError(error)) return;
+    if (isUnreachable(error)) {
+      // Ohne Verbindung vormerken, der Abgleich sendet es später.
+      const isRead = !article.is_read;
+      await offline.queueRead(article.id, isRead);
+      mergeUpdated({ ...article, is_read: isRead });
+      renderList();
+      showNotice('Ohne Verbindung vorgemerkt, wird später übertragen.');
+      return;
+    }
     if (error instanceof ApiError && error.status === 404) {
       articles = articles.filter((a) => a.id !== article.id);
       renderList();
@@ -644,11 +755,8 @@ $('btn-more').addEventListener('click', () => withBusy($('btn-more'), () => load
 // Lesemodus
 // ---------------------------------------------------------------------------
 
-async function openReader(id) {
-  const token = ++routeToken;
+function clearReaderView() {
   readerArticle = null;
-  show('reader');
-  window.scrollTo(0, 0);
   $('reader-title').textContent = '';
   $('reader-meta').replaceChildren();
   $('reader-content').replaceChildren();
@@ -658,37 +766,77 @@ async function openReader(id) {
   $('form-tags').hidden = true;
   clearError($('reader-error'));
   clearError($('tags-error'));
+  $('reader-notice').hidden = true;
+}
+
+/** Baut den Lesemodus für einen Artikel auf (aus dem Server oder dem Offline-Speicher). */
+function renderArticle(article) {
+  readerArticle = article;
+  document.title = `${article.title} – ${APP_TITLE}`;
+  $('reader-title').textContent = article.title;
+
+  const meta = $('reader-meta');
+  meta.replaceChildren();
+  const href = safeUrl(article.url, location.href, ['http:', 'https:']);
+  if (href) {
+    const source = element('a', '', hostOf(article.url));
+    source.href = href;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    meta.append(source);
+  } else {
+    meta.append(hostOf(article.url));
+  }
+  meta.append(` · gespeichert am ${formatDate(article.created_at)}`);
+
+  renderSafeHtml($('reader-content'), article.content, article.url);
+  $('reader-delete').hidden = false;
+  updateReaderControls();
+  $('form-tags').hidden = false;
+  highlighter.open(article.id, article.highlights);
+}
+
+async function openReader(id) {
+  const token = ++routeToken;
+  show('reader');
+  window.scrollTo(0, 0);
+  clearReaderView();
+
+  // Gespeicherte Kopie sofort anzeigen (auch bei schlechter Verbindung), danach beim Server
+  // nachsehen, ob sich Status, Schlagwörter oder Markierungen geändert haben.
+  const stored = await offline.getArticle(id);
+  if (token !== routeToken) return;
+  if (stored) renderArticle(stored);
 
   try {
     const article = await api.getArticle(id);
-    if (token !== routeToken) return; // inzwischen woanders hin navigiert
-    readerArticle = article;
-    document.title = `${article.title} – ${APP_TITLE}`;
-    $('reader-title').textContent = article.title;
-
-    const meta = $('reader-meta');
-    const href = safeUrl(article.url, location.href, ['http:', 'https:']);
-    if (href) {
-      const source = element('a', '', hostOf(article.url));
-      source.href = href;
-      source.target = '_blank';
-      source.rel = 'noopener noreferrer';
-      meta.append(source);
-    } else {
-      meta.append(hostOf(article.url));
+    if (token !== routeToken) return;
+    setOfflineBanner(false);
+    offline.putArticle(article, { opened: true });
+    if (!stored || stored.content !== article.content) {
+      clearReaderView();
+      renderArticle(article);
+    } else if (!isEditingTags()) {
+      readerArticle = article;
+      updateReaderControls();
+      highlighter.open(article.id, article.highlights);
     }
-    meta.append(` · gespeichert am ${formatDate(article.created_at)}`);
-
-    renderSafeHtml($('reader-content'), article.content, article.url);
-    $('reader-delete').hidden = false;
-    updateReaderControls();
-    $('form-tags').hidden = false;
-    highlighter.open(article.id); // Fehler zeigt das Bedienfeld, der Artikel bleibt lesbar
   } catch (error) {
     if (token !== routeToken) return;
     if (handleAuthError(error)) return;
+    if (isUnreachable(error)) {
+      if (stored) setOfflineBanner(true);
+      else showError($('reader-error'), 'Dieser Artikel ist auf diesem Gerät nicht gespeichert. Ohne Internetverbindung lässt er sich nicht öffnen.');
+      return;
+    }
+    if (error instanceof ApiError && error.status === 404) offline.remove(id);
+    clearReaderView();
     showError($('reader-error'), error.message);
   }
+}
+
+function isEditingTags() {
+  return document.activeElement === $('tags-input');
 }
 
 function updateReaderControls() {
@@ -711,12 +859,24 @@ async function patchReader(changes, button, errorElement) {
   if (!readerArticle) return;
   const token = routeToken;
   clearError(errorElement);
+  $('reader-notice').hidden = true;
   try {
     const updated = await withBusy(button, () => api.updateArticle(readerArticle.id, changes));
     if (token !== routeToken) return;
     applyReaderUpdate(updated);
   } catch (error) {
     if (token !== routeToken || handleAuthError(error)) return;
+    if (isUnreachable(error) && Object.keys(changes).length === 1 && 'is_read' in changes) {
+      // Ohne Verbindung vormerken, der Abgleich sendet es später.
+      await offline.queueRead(readerArticle.id, changes.is_read);
+      readerArticle = { ...readerArticle, is_read: changes.is_read };
+      mergeUpdated({ id: readerArticle.id, is_read: changes.is_read });
+      listLoaded = false;
+      updateReaderControls();
+      $('reader-notice').textContent = 'Ohne Verbindung vorgemerkt, wird später übertragen.';
+      $('reader-notice').hidden = false;
+      return;
+    }
     showError(errorElement, error.message);
   }
 }
@@ -742,16 +902,137 @@ $('reader-delete').addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Offline-Lesen (#/account/offline)
+// ---------------------------------------------------------------------------
+
+async function showOfflineStatus() {
+  const { count, bytes } = await offline.stats();
+  const form = $('form-offline');
+  form.elements.enabled.checked = offline.isEnabled();
+  $('offline-sync').disabled = !offline.isEnabled();
+  $('offline-clear').disabled = count === 0;
+  if (!offline.isEnabled()) {
+    $('offline-status').textContent = 'Das Speichern für das Lesen ohne Internet ist ausgeschaltet.';
+  } else if (count === 0) {
+    $('offline-status').textContent = 'Auf diesem Gerät ist noch nichts gespeichert.';
+  } else {
+    const mb = Math.max(0.1, bytes / (1024 * 1024)).toFixed(1).replace('.', ',');
+    $('offline-status').textContent = `Auf diesem Gerät gespeichert: ${count} Artikel (etwa ${mb} MB).`;
+  }
+}
+
+function openOfflinePage() {
+  openAccountPage('offline', 'Offline-Lesen');
+  showOfflineStatus();
+}
+
+$('form-offline').elements.enabled.addEventListener('change', async (event) => {
+  await offline.setEnabled(event.target.checked);
+  if (event.target.checked) await runOfflineSync();
+  else await showOfflineStatus();
+});
+
+async function runOfflineSync() {
+  clearError($('offline-error'));
+  $('offline-status').textContent = 'Wird aktualisiert …';
+  const result = await scheduleSync(true);
+  if (result?.offline) showError($('offline-error'), 'Keine Verbindung zum Server. Es konnte nichts aktualisiert werden.');
+  await showOfflineStatus();
+}
+
+$('form-offline').addEventListener('submit', (event) => {
+  event.preventDefault();
+  withBusy($('offline-sync'), runOfflineSync);
+});
+
+$('offline-clear').addEventListener('click', async () => {
+  await offline.clearAll();
+  if (currentUser) await offline.adopt(currentUser);
+  await showOfflineStatus();
+});
+
+// ---------------------------------------------------------------------------
+// Verbindung, Teilen-Ziel, Service Worker
+// ---------------------------------------------------------------------------
+
+/** Wieder online (oder „Erneut versuchen“): Liste oder Artikel neu laden, Speicher abgleichen. */
+function retryConnection() {
+  if (!currentUser) return;
+  scheduleSync(true);
+  if (!$('view-home').hidden) loadArticles(true);
+  else if (!$('view-reader').hidden) route();
+}
+
+$('offline-retry').addEventListener('click', retryConnection);
+window.addEventListener('online', () => {
+  if (offlineView) retryConnection();
+  else scheduleSync();
+});
+
+/** Über „Teilen“ erhaltene Adresse speichern, sobald der Benutzer angemeldet ist. */
+async function savePendingShare() {
+  const url = pendingShare;
+  pendingShare = '';
+  if (!url || !currentUser) return;
+  clearError($('list-error'));
+  showNotice('Artikel wird gespeichert …');
+  try {
+    const article = await api.addArticle(url);
+    listLoaded = false;
+    tagsStale = true;
+    showNotice(`Gespeichert: ${article.title}`);
+    if (!$('view-home').hidden) loadArticles(true);
+  } catch (error) {
+    if (handleAuthError(error)) return;
+    showNotice('');
+    showError($('list-error'), error.message);
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  // Fehler (z. B. unsicherer Kontext ohne HTTPS) sind harmlos: die App läuft auch ohne.
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 
 async function init() {
-  try {
-    currentUser = await api.me();
+  // Bei schlechter Verbindung nicht auf den Server warten: mit gespeicherten Daten starten
+  // und die Anmeldung im Hintergrund prüfen.
+  const owner = offline.isEnabled() ? await offline.getOwner() : null;
+  let routed = false;
+  const startStored = () => {
+    currentUser = owner;
+    setOfflineBanner(true);
+    routed = true;
     route();
+  };
+  const slow = owner ? setTimeout(startStored, BOOT_SLOW_MS) : 0;
+
+  try {
+    const user = await api.me();
+    clearTimeout(slow);
+    await offline.adopt(user);
+    currentUser = user;
+    setOfflineBanner(false);
+    if (routed) {
+      // Schon mit gespeicherten Daten gestartet: nicht aus dem Lesen reißen, nur die Liste auffrischen.
+      if (!$('view-home').hidden) loadArticles(true);
+    } else {
+      route();
+    }
+    savePendingShare();
   } catch (error) {
-    show('auth');
-    if (!(error instanceof ApiError) || error.status !== 401) {
+    clearTimeout(slow);
+    if (isUnreachable(error) && owner) {
+      if (!routed) startStored();
+      return;
+    }
+    if (handleAuthError(error)) return;
+    show('auth'); // Server nicht erreichbar oder anderer Fehler: gespeicherte Daten bleiben
+    if (!(error instanceof ApiError && error.status === 401)) {
       showError($('auth-error'), error.message);
     }
   }

@@ -5,11 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Leseliste</title>
+  <meta name="theme-color" content="#1b5e9e" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161615" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Leseliste">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
   <main id="app">
+
+    <div id="offline-banner" class="banner" role="status" hidden>
+      <span>Keine oder schlechte Verbindung. Es werden die auf diesem Gerät gespeicherten Artikel angezeigt.</span>
+      <button type="button" id="offline-retry">Erneut versuchen</button>
+    </div>
 
     <section id="view-loading">
       <p class="muted">Lade …</p>
@@ -44,6 +58,7 @@
             </button>
             <ul id="user-menu" class="menu" hidden>
               <li><a href="#/account/share">Teilen aus Apps</a></li>
+              <li><a href="#/account/offline">Offline-Lesen</a></li>
               <li><a href="#/account/data">Export und Import</a></li>
               <li><a href="#/account/password">Passwort ändern</a></li>
               <li><a href="#/account/delete" class="menu-danger">Konto löschen</a></li>
@@ -80,6 +95,29 @@
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
+    </section>
+
+    <section id="view-offline" hidden>
+      <h1>Offline-Lesen</h1>
+      <p>Damit du auch ohne Internet lesen kannst (zum Beispiel im Zug), speichert dieses Gerät
+        deine neuesten ungelesenen Artikel samt Markierungen und Notizen und jeden Artikel, den
+        du geöffnet hast (14 Tage, höchstens 30). Ohne Verbindung kannst du sie lesen, durchsuchen
+        und als gelesen markieren. Alles andere braucht eine Verbindung.</p>
+      <p class="hint">Die Artikel liegen nur in diesem Browser. Beim Abmelden werden sie von diesem
+        Gerät gelöscht.</p>
+      <form id="form-offline">
+        <label class="check">
+          <input type="checkbox" name="enabled">
+          Artikel für das Lesen ohne Internet auf diesem Gerät speichern
+        </label>
+        <p id="offline-status" class="muted" role="status"></p>
+        <p id="offline-error" class="error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button type="submit" id="offline-sync" class="primary">Jetzt aktualisieren</button>
+          <button type="button" id="offline-clear">Gespeicherte Artikel löschen</button>
+          <a href="#/" class="button-link">Zurück zur Liste</a>
+        </div>
+      </form>
     </section>
 
     <section id="view-data" hidden>
@@ -216,6 +254,7 @@
         </form>
         <p id="tags-error" class="error" role="alert" hidden></p>
         <p id="reader-error" class="error" role="alert" hidden></p>
+        <p id="reader-notice" class="success" role="status" hidden></p>
         <div class="reader-body">
           <div id="reader-content" class="prose"></div>
           <aside id="reader-notes" class="notes" aria-label="Notizen" hidden></aside>

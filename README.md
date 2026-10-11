@@ -50,6 +50,17 @@ Die Schnittstelle akzeptiert die Adresse als JSON (`url` oder `text`), als Formu
 
 Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder einer eigenen Farbe markieren. Ein Klick auf eine Markierung öffnet das Bedienfeld: Farbe ändern, optionale Notiz schreiben, Markierung löschen. Notizen stehen neben dem Text (auf schmalen Bildschirmen darunter). „Markierungen ausblenden“ zeigt den Artikel ohne Farben und Notizen.
 
+## Installieren und offline lesen (PWA)
+
+Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“ bzw. „App installieren“) und gespeicherte Artikel auch ohne Internet lesen, zum Beispiel im Zug.
+
+**Wichtig: Das funktioniert nur über HTTPS.** Browser erlauben den dafür nötigen Service Worker nur auf `localhost` und auf HTTPS-Adressen. Mit der Standardeinstellung (HTTP auf Port 80, z. B. im Heimnetz) läuft die App normal, aber ohne Installation und ohne Start ohne Netz. Setze dafür `SITE_ADDRESS` auf deine Domain (Caddy holt das Zertifikat selbst, siehe oben) und `COOKIE_SECURE=true`. Hinter Tailscale geht es mit `tailscale serve` und dem HTTPS-Namen des Geräts.
+
+- Das Gerät speichert die 30 neuesten ungelesenen Artikel samt Markierungen und Notizen und jeden Artikel, den du geöffnet hast (14 Tage, höchstens 30). Der Abgleich läuft beim Öffnen der Liste im Hintergrund, unter „Offline-Lesen“ im Konto-Menü lässt er sich auch von Hand starten, ausschalten oder löschen.
+- Ohne Verbindung (oder bei sehr schlechter) siehst du die gespeicherten Artikel, kannst sie lesen, durchsuchen und als gelesen markieren. Das Markieren wird nachgeholt, sobald wieder Verbindung besteht. Neue Artikel speichern, Schlagwörter, Markierungen und Notizen ändern braucht eine Verbindung.
+- Die Artikel liegen nur in diesem Browser. Beim Abmelden werden sie vom Gerät gelöscht. Abmelden geht deshalb nur mit Verbindung.
+- Android: In der installierten App erscheint die Leseliste im Teilen-Menü anderer Apps. Das Teilen speichert den Artikel nach der Anmeldung. iPhone und iPad unterstützen das nicht, dort bleibt der Kurzbefehl (siehe oben).
+
 ## Export und Import
 
 Im Konto-Menü unter „Export und Import“ lädt ein Klick auf „Alle Artikel herunterladen“ eine einzelne JSON-Datei mit den eigenen Artikeln (Adresse, Titel, Inhalt, Schlagwörter, Gelesen-Status). Es braucht nur den Browser, keine Entpackprogramme. Die Datei enthält keine Kontodaten.

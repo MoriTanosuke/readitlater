@@ -15,6 +15,7 @@ use crate::{
     error::{ApiError, ApiJson},
     extract::{self, ExtractError},
     fetch::FetchError,
+    highlights::{self, Highlight},
     tags,
 };
 
@@ -75,6 +76,9 @@ pub struct ArticleFull {
     is_read: bool,
     created_at: String,
     tags: Vec<String>,
+    /// Markierungen und Notizen, damit der Lesemodus (und der Offline-Speicher) mit einer
+    /// Anfrage auskommt.
+    highlights: Vec<Highlight>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -127,6 +131,7 @@ impl From<FullRow> for ArticleFull {
             is_read: row.is_read,
             created_at: row.created_at,
             tags: parse_tags(&row.tags),
+            highlights: Vec::new(),
         }
     }
 }
@@ -326,7 +331,12 @@ pub async fn show(
     .bind(user.id)
     .fetch_optional(&state.pool)
     .await?;
-    article.map(|row| Json(row.into())).ok_or_else(not_found)
+    let Some(row) = article else {
+        return Err(not_found());
+    };
+    let mut full = ArticleFull::from(row);
+    full.highlights = highlights::for_article(&state.pool, user.id, id).await?;
+    Ok(Json(full))
 }
 
 /// `PATCH /api/articles/{id}`: Gelesen-Status und/oder Schlagwörter ändern.

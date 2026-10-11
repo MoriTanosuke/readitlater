@@ -23,7 +23,9 @@
 
 	handle {
 		root * /srv
+		# Immer beim Server nachfragen (sw.js darf nie veraltet im Browser-Cache liegen).
 		header Cache-Control "no-cache"
+		header /manifest.webmanifest Content-Type "application/manifest+json"
 		file_server
 	}
 }
