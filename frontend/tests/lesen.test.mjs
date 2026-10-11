@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-import { ARTIKEL } from './fixtures.mjs';
+import { ARTIKEL, ENGLISCH } from './fixtures.mjs';
 import { PUBLIC, setup, steps } from './helpers.mjs';
 
-const { $, visible, until, site, teardown } = await setup({ '/artikel.html': ARTIKEL });
+const { $, visible, until, site, teardown } = await setup({
+  '/artikel.html': ARTIKEL,
+  '/english.html': ENGLISCH,
+});
 after(teardown);
 
 const reading = await import(pathToFileURL(path.join(PUBLIC, 'js/reading.js')).href);
@@ -149,4 +152,31 @@ test('Seite „Darstellung“ und Bedienfeld im Lesemodus', async (t) => {
   window.dispatchEvent(new window.StorageEvent('storage', { key: 'leseliste-reading' }));
   assert.deepEqual(reading.getSettings(), reading.DEFAULTS);
   ok('andere Tabs und kaputte Daten werden sicher verarbeitet');
+});
+
+test('Sprache des Artikels steht als lang-Attribut im Lesemodus', async (t) => {
+  const ok = steps(t);
+  // Der Test davor hat sich angemeldet; hier zwei Artikel speichern und lesen.
+  window.location.hash = '#/';
+  await until(() => visible('view-home'), 'Liste');
+  for (const route of ['/english.html']) {
+    $('add-url').value = site.url(route);
+    $('form-add').requestSubmit();
+  }
+  await until(() => document.querySelectorAll('#article-list li').length === 2, 'zwei Artikel');
+  const open = async (title) => {
+    const item = [...document.querySelectorAll('#article-list li')].find((li) =>
+      li.querySelector('.article-title').textContent === title);
+    window.location.hash = item.querySelector('.article-main').getAttribute('href');
+    await until(() => visible('view-reader') && $('reader-title').textContent === title, title);
+  };
+  await open('English Article');
+  assert.equal($('reader-content').lang, 'en');
+  assert.equal($('reader-title').lang, 'en');
+  ok('englischer Text: lang="en", obwohl die Seite lang="de" behauptet');
+  window.location.hash = '#/';
+  await until(() => visible('view-home'), 'Liste');
+  await open('E2E Testartikel');
+  assert.equal($('reader-content').lang, 'de');
+  ok('deutscher Text: lang="de"');
 });

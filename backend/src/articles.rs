@@ -73,6 +73,8 @@ pub struct ArticleFull {
     title: String,
     excerpt: String,
     content: String,
+    /// Sprache des Textes (ISO 639-1), `null` wenn unbekannt.
+    lang: Option<String>,
     is_read: bool,
     created_at: String,
     tags: Vec<String>,
@@ -115,6 +117,7 @@ struct FullRow {
     title: String,
     excerpt: String,
     content: String,
+    lang: Option<String>,
     is_read: bool,
     created_at: String,
     tags: String,
@@ -128,6 +131,7 @@ impl From<FullRow> for ArticleFull {
             title: row.title,
             excerpt: row.excerpt,
             content: row.content,
+            lang: row.lang,
             is_read: row.is_read,
             created_at: row.created_at,
             tags: parse_tags(&row.tags),
@@ -192,8 +196,8 @@ pub async fn save_article(
         .map_err(extract_error)?;
 
     let inserted = sqlx::query_as::<_, SummaryRow>(
-        "INSERT INTO articles (user_id, url, title, content, content_text, excerpt) \
-         VALUES (?, ?, ?, ?, ?, ?) \
+        "INSERT INTO articles (user_id, url, title, content, content_text, excerpt, lang) \
+         VALUES (?, ?, ?, ?, ?, ?, ?) \
          RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags",
     )
     .bind(user_id)
@@ -202,6 +206,7 @@ pub async fn save_article(
     .bind(&extracted.content_html)
     .bind(&extracted.content_text)
     .bind(&extracted.excerpt)
+    .bind(&extracted.lang)
     .fetch_one(&state.pool)
     .await;
 
@@ -321,7 +326,7 @@ pub async fn show(
     Path(id): Path<i64>,
 ) -> Result<Json<ArticleFull>, ApiError> {
     let article = sqlx::query_as::<_, FullRow>(
-        "SELECT a.id, a.url, a.title, a.excerpt, a.content, a.is_read, a.created_at, \
+        "SELECT a.id, a.url, a.title, a.excerpt, a.content, a.lang, a.is_read, a.created_at, \
                 (SELECT json_group_array(name) FROM ( \
                     SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
                     WHERE at.article_id = a.id ORDER BY t.name)) AS tags \

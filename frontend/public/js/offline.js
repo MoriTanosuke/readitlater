@@ -165,6 +165,7 @@ export async function putArticle(article, { opened = false } = {}) {
     title: article.title,
     excerpt: article.excerpt,
     content: article.content,
+    lang: article.lang ?? null,
     is_read: article.is_read,
     created_at: article.created_at,
     tags: article.tags ?? [],
@@ -201,7 +202,7 @@ export async function list(filter = {}) {
       return words.every((w) => haystack.includes(w));
     })
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id));
-  return items.map(({ content, highlights, opened_at, ...summary }) => summary);
+  return items.map(({ content, lang, highlights, opened_at, ...summary }) => summary);
 }
 
 /** Schlagwörter mit Anzahl über die gespeicherten Artikel. */

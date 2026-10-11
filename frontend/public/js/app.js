@@ -758,7 +758,16 @@ $('btn-more').addEventListener('click', () => withBusy($('btn-more'), () => load
 // Lesemodus
 // ---------------------------------------------------------------------------
 
+/** Setzt die Sprache des Artikels (Silbentrennung, Screenreader); ohne Angabe gilt die der App. */
+function setArticleLang(lang) {
+  for (const element of [$('reader-title'), $('reader-content')]) {
+    if (lang) element.lang = lang;
+    else element.removeAttribute('lang');
+  }
+}
+
 function clearReaderView() {
+  setArticleLang('');
   readerArticle = null;
   $('reader-title').textContent = '';
   $('reader-meta').replaceChildren();
@@ -793,6 +802,7 @@ function renderArticle(article) {
   meta.append(` · gespeichert am ${formatDate(article.created_at)}`);
 
   renderSafeHtml($('reader-content'), article.content, article.url);
+  setArticleLang(article.lang);
   $('reader-delete').hidden = false;
   updateReaderControls();
   $('form-tags').hidden = false;

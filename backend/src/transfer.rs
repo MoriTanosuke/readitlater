@@ -242,6 +242,8 @@ struct Prepared {
     excerpt: String,
     content: String,
     content_text: String,
+    /// Wird beim Import aus dem Text erkannt, ein Wert aus der Datei zählt nicht.
+    lang: Option<String>,
     is_read: bool,
     created_at: Option<String>,
     tags: Vec<String>,
@@ -320,8 +322,8 @@ pub async fn import(
     for article in prepared {
         let id: Option<i64> = sqlx::query_scalar(
             "INSERT INTO articles \
-                 (user_id, url, title, content, content_text, excerpt, is_read, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))) \
+                 (user_id, url, title, content, content_text, excerpt, lang, is_read, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))) \
              ON CONFLICT (user_id, url) DO NOTHING RETURNING id",
         )
         .bind(user.id)
@@ -330,6 +332,7 @@ pub async fn import(
         .bind(&article.content)
         .bind(&article.content_text)
         .bind(&article.excerpt)
+        .bind(&article.lang)
         .bind(article.is_read)
         .bind(&article.created_at)
         .fetch_optional(&mut *tx)
@@ -417,6 +420,7 @@ fn prepare(raw: ImportArticle) -> Option<Prepared> {
         excerpt: truncate(&collapse(&raw.excerpt), MAX_EXCERPT_CHARS),
         // Die Datei kann verändert worden sein: HTML immer neu bereinigen.
         content: extract::sanitize(&raw.content),
+        lang: extract::detect_language(&collapse(&raw.content_text)),
         content_text: collapse(&raw.content_text),
         is_read: raw.is_read,
         created_at: raw.created_at.filter(|t| valid_timestamp(t)),
