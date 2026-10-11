@@ -2,7 +2,7 @@
 //
 // Die Einstellungen gelten pro Gerät und liegen in localStorage (nur als Bequemlichkeit: ohne
 // Speicher gilt die Voreinstellung). Angewendet werden sie über Attribute am <html>-Element
-// (data-theme, data-contrast, data-reading-font) und CSS-Variablen per CSSOM; wegen der CSP gibt
+// (data-theme, data-contrast, data-reading-font, data-reading-align) und CSS-Variablen per CSSOM; wegen der CSP gibt
 // es kein style-Attribut im HTML. Das Aussehen selbst steht in style.css.
 
 const KEY = 'leseliste-reading';
@@ -14,6 +14,7 @@ export const FONTS = {
   wide: 'Breite Schrift',
   mono: 'Monospace',
 };
+export const ALIGNS = { left: 'Linksbündig', justify: 'Blocksatz' };
 export const THEMES = { auto: 'Wie das Gerät', light: 'Hell', dark: 'Dunkel' };
 export const CONTRASTS = { soft: 'Weich', normal: 'Normal', high: 'Hoch' };
 
@@ -28,6 +29,7 @@ export const DEFAULTS = Object.freeze({
   size: 100,
   width: 70,
   leading: 1.7,
+  align: 'left',
   theme: 'auto',
   contrast: 'normal',
 });
@@ -49,6 +51,7 @@ export function normalize(raw) {
     size: num(input.size, RANGES.size, DEFAULTS.size),
     width: num(input.width, RANGES.width, DEFAULTS.width),
     leading: num(input.leading, RANGES.leading, DEFAULTS.leading),
+    align: pick(input.align, ALIGNS, DEFAULTS.align),
     theme: pick(input.theme, THEMES, DEFAULTS.theme),
     contrast: pick(input.contrast, CONTRASTS, DEFAULTS.contrast),
   };
@@ -96,6 +99,7 @@ export function apply(settings = current) {
   root.dataset.theme = settings.theme;
   root.dataset.contrast = settings.contrast;
   root.dataset.readingFont = settings.font;
+  root.dataset.readingAlign = settings.align;
   root.style.setProperty('--reading-size', `${(BASE_SIZE_REM * settings.size) / 100}rem`);
   root.style.setProperty('--reading-leading', String(settings.leading));
   root.style.setProperty('--reading-measure', String(settings.width));
@@ -185,6 +189,7 @@ export function mountControls(container) {
     rangeField('size', 'Textgröße'),
     rangeField('width', 'Textbreite'),
     rangeField('leading', 'Zeilenabstand'),
+    selectField('align', 'Textausrichtung', ALIGNS),
     selectField('theme', 'Farbschema', THEMES),
     selectField('contrast', 'Kontrast', CONTRASTS),
   );

@@ -22,7 +22,7 @@ function set(container, index, value, type) {
   return control;
 }
 // Reihenfolge der Bedienelemente
-const FONT = 0, SIZE = 1, WIDTH = 2, LEADING = 3, THEME = 4, CONTRAST = 5;
+const FONT = 0, SIZE = 1, WIDTH = 2, LEADING = 3, ALIGN = 4, THEME = 5, CONTRAST = 6;
 
 test('normalize macht aus kaputten Daten gültige Einstellungen', () => {
   assert.deepEqual(reading.normalize(null), reading.DEFAULTS);
@@ -32,6 +32,7 @@ test('normalize macht aus kaputten Daten gültige Einstellungen', () => {
     font: '__proto__', size: 'groß', width: Infinity, leading: NaN, theme: 'neon', contrast: 5,
   });
   assert.deepEqual(kaputt, reading.DEFAULTS);
+  assert.equal(reading.normalize({ align: 'center' }).align, 'left');
   const grenzen = reading.normalize({ size: 5000, width: -3, leading: 99, font: 'serif' });
   assert.deepEqual(grenzen, { ...reading.DEFAULTS, size: 200, width: 40, leading: 2.2, font: 'serif' });
   // Zwischenwerte rasten auf die Schrittweite ein.
@@ -60,7 +61,7 @@ test('Seite „Darstellung“ und Bedienfeld im Lesemodus', async (t) => {
   assert.ok($('user-menu').querySelector('a[href="#/account/display"]'));
   window.location.hash = '#/account/display';
   await until(() => visible('view-display'), 'Seite Darstellung');
-  assert.equal($('display-controls').querySelectorAll('select, input[type="range"]').length, 6);
+  assert.equal($('display-controls').querySelectorAll('select, input[type="range"]').length, 7);
   assert.equal($('display-controls').querySelector('.reading-reset').disabled, true);
 
   set('display-controls', FONT, 'serif', 'change');
@@ -71,17 +72,19 @@ test('Seite „Darstellung“ und Bedienfeld im Lesemodus', async (t) => {
   assert.equal(root().style.getPropertyValue('--reading-measure'), '55');
   set('display-controls', LEADING, 2, 'input');
   assert.equal(root().style.getPropertyValue('--reading-leading'), '2');
+  set('display-controls', ALIGN, 'justify', 'change');
+  assert.equal(root().dataset.readingAlign, 'justify');
   set('display-controls', THEME, 'dark', 'change');
   assert.equal(root().dataset.theme, 'dark');
   set('display-controls', CONTRAST, 'high', 'change');
   assert.equal(root().dataset.contrast, 'high');
-  ok('alle sechs Einstellungen wirken sofort auf das Dokument');
+  ok('alle sieben Einstellungen wirken sofort auf das Dokument');
 
   // Anzeige der Werte und Speicherung
   const outputs = [...$('display-controls').querySelectorAll('output')].map((o) => o.textContent);
   assert.deepEqual(outputs, ['150 %', '55 Zeichen', '2,0']);
   assert.deepEqual(JSON.parse(stored()), {
-    font: 'serif', size: 150, width: 55, leading: 2, theme: 'dark', contrast: 'high',
+    font: 'serif', size: 150, width: 55, leading: 2, align: 'justify', theme: 'dark', contrast: 'high',
   });
   assert.equal($('display-controls').querySelector('.reading-reset').disabled, false);
   ok('Werte werden angezeigt und pro Gerät gespeichert');
