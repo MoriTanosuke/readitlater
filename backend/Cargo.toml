@@ -14,7 +14,9 @@ futures-util = { version = "0.3.34", default-features = false, features = ["std"
 getrandom = "0.4"
 governor = { version = "0.10.4", default-features = false, features = ["std", "dashmap", "quanta"] }
 hex = "0.4"
+mime_guess = "2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "charset", "gzip", "brotli"] }
+rust-embed = "8"
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -10,6 +10,7 @@ pub mod fetch;
 pub mod highlights;
 pub mod ratelimit;
 pub mod share;
+pub mod static_files;
 pub mod tags;
 pub mod transfer;
 
@@ -60,7 +61,7 @@ impl AppState {
     }
 }
 
-/// Baut den Router. Alle Routen liegen unter `/api`.
+/// Baut den Router. Die Schnittstelle liegt unter `/api`, der Rest ist das Frontend.
 pub fn app(state: AppState) -> Router {
     // Routen, die Passwörter prüfen oder hashen: strengere Ratenbegrenzung pro IP.
     let password_routes = Router::new()
@@ -117,7 +118,11 @@ pub fn app(state: AppState) -> Router {
             ratelimit::general,
         ))
         .with_state(state);
-    Router::new().nest("/api", api)
+    // Alles außerhalb von /api kommt aus dem eingebetteten Frontend.
+    Router::new()
+        .nest("/api", api)
+        .fallback(static_files::serve)
+        .layer(middleware::from_fn(static_files::security_headers))
 }
 
 async fn health() -> &'static str {

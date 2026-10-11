@@ -1,0 +1,9 @@
+.git
+**/target
+**/node_modules
+backend/data
+data
+*.db
+*.db-shm
+*.db-wal
+frontend/tests
