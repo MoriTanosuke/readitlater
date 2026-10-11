@@ -51,6 +51,13 @@
 :root[data-reading-font="wide"] { --reading-font: Verdana, Geneva, "DejaVu Sans", sans-serif; }
 :root[data-reading-font="mono"] { --reading-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
+/* Blocksatz nur für Fließtext (nicht für Code und Tabellen); Silbentrennung nach der Sprache
+   der Seite (lang="de"), sonst wirkt Blocksatz mit großen Wortlücken. */
+:root[data-reading-align="justify"] .reading-scope .prose :is(p, li, blockquote, figcaption) {
+  text-align: justify;
+  hyphens: auto;
+}
+
 * { box-sizing: border-box; }
 
 [hidden] { display: none !important; }

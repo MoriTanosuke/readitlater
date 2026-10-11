@@ -59,7 +59,7 @@ Die Schnittstelle akzeptiert die Adresse als JSON (`url` oder `text`), als Formu
 
 ## Darstellung anpassen
 
-Im Lesemodus öffnet der Knopf „Aa“ ein Bedienfeld, im Konto-Menü gibt es zusätzlich die Seite „Darstellung“ mit Vorschau. Einstellbar sind Schriftart (Systemschrift, Serif, breite Schrift, Monospace), Textgröße, Textbreite (Zeichen pro Zeile), Zeilenabstand, Farbschema (wie das Gerät, hell oder dunkel) und Kontrast (weich, normal, hoch, jeweils für Hell und Dunkel). Die Einstellungen gelten pro Gerät und Browser und funktionieren auch offline. „Zurücksetzen“ stellt die Voreinstellung her. Dafür braucht der Browser `light-dark()` (Chrome ab 123, Safari ab 17.5, Firefox ab 120).
+Im Lesemodus öffnet der Knopf „Aa“ ein Bedienfeld, im Konto-Menü gibt es zusätzlich die Seite „Darstellung“ mit Vorschau. Einstellbar sind Schriftart (Systemschrift, Serif, breite Schrift, Monospace), Textgröße, Textbreite (Zeichen pro Zeile), Zeilenabstand, Textausrichtung (linksbündig oder Blocksatz mit automatischer Silbentrennung), Farbschema (wie das Gerät, hell oder dunkel) und Kontrast (weich, normal, hoch, jeweils für Hell und Dunkel). Die Einstellungen gelten pro Gerät und Browser und funktionieren auch offline. „Zurücksetzen“ stellt die Voreinstellung her. Dafür braucht der Browser `light-dark()` (Chrome ab 123, Safari ab 17.5, Firefox ab 120).
 
 ## Markierungen und Notizen
 
