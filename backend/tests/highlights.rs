@@ -405,3 +405,24 @@ async fn alte_exportdateien_ohne_markierungen_lassen_sich_importieren() {
     assert_eq!(r.body["imported"], 1);
     assert_eq!(r.body["highlights"], 0);
 }
+
+#[tokio::test]
+async fn artikel_antwort_enthaelt_die_eigenen_markierungen() {
+    let app = setup(true).await;
+    let a = register_cookie(&app, "a@example.org").await;
+    let b = register_cookie(&app, "b@example.org").await;
+    let art_a = seed(&app, "a@example.org", "https://example.org/a").await;
+    create(&app, &a, art_a, new_highlight()).await;
+
+    let r = get(&app, &format!("/api/articles/{art_a}"), Some(&a)).await;
+    assert_eq!(r.status, StatusCode::OK);
+    let hs = r.body["highlights"].as_array().unwrap();
+    assert_eq!(hs.len(), 1);
+    assert_eq!(hs[0]["quote"], "Satz");
+    assert_eq!(hs[0]["note"], "Merken");
+
+    // Ein fremder Benutzer bekommt den Artikel gar nicht erst.
+    let r = get(&app, &format!("/api/articles/{art_a}"), Some(&b)).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert!(r.body.get("highlights").is_none());
+}

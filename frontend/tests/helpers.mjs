@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import 'fake-indexeddb/auto'; // IndexedDB für den Offline-Speicher der App (jsdom hat keine)
 import { JSDOM } from 'jsdom';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -105,12 +106,12 @@ export async function startBackend(env = {}) {
  * Lädt das Frontend in jsdom. Anfragen an /api/... gehen mit Cookie-Speicher an das echte
  * Backend. Setzt die globalen Variablen, die app.js erwartet (document, location, …).
  */
-export async function openApp(backendUrl) {
+export async function openApp(backendUrl, { url = 'http://app.test/' } = {}) {
   const html = readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace(
     /<script[^>]*><\/script>/,
     '',
   );
-  const dom = new JSDOM(html, { url: 'http://app.test/', pretendToBeVisual: true });
+  const dom = new JSDOM(html, { url, pretendToBeVisual: true });
   const { window } = dom;
   Object.assign(globalThis, {
     window,
@@ -126,9 +127,15 @@ export async function openApp(backendUrl) {
   const realFetch = globalThis.fetch;
   let cookie = '';
   let inFlight = 0; // laufende Anfragen der App (für idle())
+  // Simulierte Verbindung: false (alles geht), true (jede Anfrage scheitert wie im Browser)
+  // oder 'hang' (Anfragen hängen, bis die Verbindung wieder da ist, dann scheitern sie).
+  let offline = false;
+  const hanging = [];
   globalThis.fetch = async (route, init = {}) => {
     inFlight += 1;
     try {
+      if (offline === 'hang') await new Promise((_, reject) => hanging.push(reject));
+      if (offline) throw new TypeError('fetch failed');
       const headers = { ...init.headers, ...(cookie ? { cookie } : {}) };
       // jsdom-Blobs/Dateien kennt das Node-fetch nicht: vorher in Bytes umwandeln.
       let reqBody = init.body;
@@ -179,17 +186,23 @@ export async function openApp(backendUrl) {
         quiet = inFlight === 0 ? quiet + 1 : 0;
       }
     },
+    /** Schaltet die simulierte Verbindung aus (true) oder ein (false). */
+    setOffline: (value) => {
+      offline = value;
+      if (!value) for (const reject of hanging.splice(0)) reject(new TypeError('fetch failed'));
+    },
     close: () => window.close(),
   };
 }
 
 /** Startet Backend und Frontend; `pages` sind die Seiten des Testservers. */
-export async function setup(pages = {}) {
+export async function setup(pages = {}, options = {}) {
   const site = await startSite(pages);
   let backend;
   try {
     backend = await startBackend();
-    const app = await openApp(backend.url);
+    const url = typeof options.url === 'function' ? options.url(site) : options.url;
+    const app = await openApp(backend.url, { url });
     return {
       ...app,
       site,

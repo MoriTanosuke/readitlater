@@ -531,15 +531,19 @@ export function createHighlighter({ api, onAuthError }) {
   content.addEventListener('load', () => layoutNotes(), true);
 
   return {
-    /** Lädt die Markierungen des Artikels, dessen Text schon angezeigt wird. */
-    async open(id) {
+    /**
+     * Zeigt die Markierungen des Artikels, dessen Text schon angezeigt wird. Sind sie schon
+     * geladen (`preloaded`, z. B. mit dem Artikel oder aus dem Offline-Speicher), entfällt die
+     * Anfrage.
+     */
+    async open(id, preloaded) {
       this.reset();
       articleId = id;
       const mine = token;
       try {
-        const list = await api.listHighlights(id);
+        const list = Array.isArray(preloaded) ? preloaded : await api.listHighlights(id);
         if (mine !== token) return;
-        items = list;
+        items = [...list].sort((a, b) => a.start - b.start || a.id - b.id);
         render();
       } catch (error) {
         if (mine !== token || onAuthError(error)) return;

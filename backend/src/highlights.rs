@@ -139,6 +139,22 @@ fn article_not_found() -> ApiError {
     ApiError::NotFound("Artikel nicht gefunden".into())
 }
 
+/// Alle Markierungen eines eigenen Artikels, nach Position sortiert.
+pub async fn for_article(
+    pool: &sqlx::SqlitePool,
+    user_id: i64,
+    article_id: i64,
+) -> Result<Vec<Highlight>, sqlx::Error> {
+    sqlx::query_as::<_, Highlight>(
+        "SELECT id, start_offset, end_offset, quote, prefix, suffix, color, note, created_at \
+         FROM highlights WHERE article_id = ? AND user_id = ? ORDER BY start_offset, id",
+    )
+    .bind(article_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// `GET /api/articles/{id}/highlights`
 pub async fn list(
     State(state): State<AppState>,
@@ -154,14 +170,7 @@ pub async fn list(
     if owned.is_none() {
         return Err(article_not_found());
     }
-    let rows = sqlx::query_as::<_, Highlight>(
-        "SELECT id, start_offset, end_offset, quote, prefix, suffix, color, note, created_at \
-         FROM highlights WHERE article_id = ? AND user_id = ? ORDER BY start_offset, id",
-    )
-    .bind(article_id)
-    .bind(user.id)
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = for_article(&state.pool, user.id, article_id).await?;
     Ok(Json(rows))
 }
 

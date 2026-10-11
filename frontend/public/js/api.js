@@ -8,35 +8,49 @@ export class ApiError extends Error {
   }
 }
 
-/** raw: body ist schon fertig (z. B. eine Datei) und wird unverändert als JSON gesendet. */
-async function request(method, path, body, raw = false) {
+const TIMEOUT_MS = 20_000; // schlechte Verbindung: lieber früh aufgeben als endlos laden
+
+/**
+ * raw: body ist schon fertig (z. B. eine Datei) und wird unverändert als JSON gesendet.
+ * timeoutMs: nach dieser Zeit gilt der Server als nicht erreichbar (ApiError mit Status 0).
+ */
+async function request(method, path, body, raw = false, timeoutMs = TIMEOUT_MS) {
   const headers = { 'X-Requested-With': 'fetch' }; // CSRF-Schutz im Backend
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-  let response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const unreachable = () => new ApiError(0, 'Server nicht erreichbar. Bitte später erneut versuchen.');
   try {
-    response = await fetch(`/api${path}`, {
-      method,
-      headers,
-      body: body === undefined || raw ? body : JSON.stringify(body),
-      credentials: 'same-origin',
-    });
-  } catch {
-    throw new ApiError(0, 'Server nicht erreichbar. Bitte später erneut versuchen.');
-  }
+    let response;
+    try {
+      response = await fetch(`/api${path}`, {
+        method,
+        headers,
+        body: body === undefined || raw ? body : JSON.stringify(body),
+        credentials: 'same-origin',
+        signal: controller.signal,
+      });
+    } catch {
+      throw unreachable();
+    }
 
-  if (response.status === 204) return null;
+    if (response.status === 204) return null;
 
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    // Antwort ohne JSON-Body
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      // Antwort ohne JSON-Body (oder die Verbindung riss beim Lesen ab)
+      if (controller.signal.aborted) throw unreachable();
+    }
+    if (!response.ok) {
+      throw new ApiError(response.status, data?.error ?? `Fehler ${response.status}`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!response.ok) {
-    throw new ApiError(response.status, data?.error ?? `Fehler ${response.status}`);
-  }
-  return data;
 }
 
 export const api = {
@@ -51,7 +65,7 @@ export const api = {
     }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
   /** file: ausgewählte Exportdatei, der Browser sendet sie direkt. */
-  importArticles: (file) => request('POST', '/import', file, true),
+  importArticles: (file) => request('POST', '/import', file, true, 300_000),
   listShareTokens: () => request('GET', '/share-tokens'),
   createShareToken: (name) => request('POST', '/share-tokens', { name }),
   deleteShareToken: (id) => request('DELETE', `/share-tokens/${encodeURIComponent(id)}`),
@@ -66,7 +80,8 @@ export const api = {
   listTags: () => request('GET', '/tags'),
   /** changes: { is_read?, tags? } */
   updateArticle: (id, changes) => request('PATCH', `/articles/${encodeURIComponent(id)}`, changes),
-  addArticle: (url) => request('POST', '/articles', { url }),
+  // Der Server lädt die Seite selbst, das dauert länger als eine normale Anfrage.
+  addArticle: (url) => request('POST', '/articles', { url }, false, 60_000),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
   deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),
   listHighlights: (articleId) =>
