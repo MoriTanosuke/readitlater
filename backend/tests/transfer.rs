@@ -540,3 +540,25 @@ async fn import_lehnt_extrem_tief_verschachteltes_html_schnell_ab() {
     assert_eq!(r.body["invalid"], 1);
     assert!(start.elapsed().as_secs() < 10, "Import dauert zu lange");
 }
+
+#[tokio::test]
+async fn import_erkennt_die_sprache_selbst_und_ignoriert_angaben_aus_der_datei() {
+    let app = setup(true).await;
+    let a = register_cookie(&app, "a@example.org").await;
+    let entries = json!([
+        {
+            "url": "https://example.org/en",
+            "content": "<p>x</p>",
+            "content_text": "The government announced on Wednesday that it would speed up the expansion of renewable energy, but critics say that the funding has not been settled and many questions remain unanswered.",
+            "lang": "xx"
+        },
+        { "url": "https://example.org/kurz", "content": "<p>Ja</p>", "content_text": "Ja", "lang": "de" },
+    ]);
+    let r = import(&app, &a, file(entries)).await;
+    assert_eq!(r.body["imported"], 2, "{:?}", r.body);
+    let langs: Vec<Option<String>> = sqlx::query_scalar("SELECT lang FROM articles ORDER BY url")
+        .fetch_all(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(langs, vec![Some("en".to_string()), None]);
+}

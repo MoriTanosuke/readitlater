@@ -81,6 +81,20 @@ async fn spawn_site() -> (SocketAddr, Arc<AtomicUsize>) {
             route_get(|| async { Html(article_page("Zweiter Artikel")) }),
         )
         .route(
+            "/english",
+            route_get(|| async {
+                // Das HTML-Attribut lang ist absichtlich falsch: Erkannt wird nur der Text.
+                let satz = "<p>The government announced on Wednesday that it would speed up the \
+                    expansion of renewable energy, but critics say that the funding has not \
+                    been settled and many questions remain unanswered.</p>";
+                Html(format!(
+                    "<html lang=\"de\"><head><title>English Article</title></head><body>\
+                     <article>{}</article></body></html>",
+                    satz.repeat(4)
+                ))
+            }),
+        )
+        .route(
             "/weiter",
             route_get(|| async { Redirect::temporary("/artikel") }),
         )
@@ -184,6 +198,7 @@ async fn speichern_extrahiert_und_bereinigt_den_inhalt() {
     }
     assert!(content.contains("https://example.org/ziel"));
     assert!(content.contains("noopener noreferrer nofollow"));
+    assert_eq!(full.body["lang"], "de");
 
     let text: String = sqlx::query_scalar("SELECT content_text FROM articles WHERE id = ?")
         .bind(id)
@@ -192,6 +207,29 @@ async fn speichern_extrahiert_und_bereinigt_den_inhalt() {
         .unwrap();
     assert!(text.contains("ausführlicher Absatz"));
     assert!(!text.contains("<p>"));
+}
+
+#[tokio::test]
+async fn sprache_wird_aus_dem_text_erkannt_nicht_aus_dem_lang_attribut() {
+    let (addr, _) = spawn_site().await;
+    let app = app_with_local_fetch().await;
+    let cookie = register_cookie(&app, "lang@example.com").await;
+    let reply = add(&app, &cookie, &site_url(addr, "/english")).await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.error());
+    let id = reply.body["id"].as_i64().unwrap();
+    let full = get(&app, &format!("/api/articles/{id}"), Some(&cookie)).await;
+    assert_eq!(
+        full.body["lang"], "en",
+        "Seite sagt lang=de, der Text ist englisch"
+    );
+    let stored: Option<String> = sqlx::query_scalar("SELECT lang FROM articles WHERE id = ?")
+        .bind(id)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(stored.as_deref(), Some("en"));
+    // Die Liste liefert die Sprache nicht (nur der Lesemodus braucht sie).
+    assert!(reply.body.get("lang").is_none());
 }
 
 #[tokio::test]

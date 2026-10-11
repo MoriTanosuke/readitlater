@@ -22,6 +22,8 @@ pub struct Extracted {
     /// Reiner Text mit normalisierten Leerzeichen (Grundlage der Suche).
     pub content_text: String,
     pub excerpt: String,
+    /// Sprache des Textes (ISO 639-1), nur wenn die Erkennung sicher ist.
+    pub lang: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -156,10 +158,107 @@ pub fn extract(html: &str, url: &Url) -> Result<Extracted, ExtractError> {
         .unwrap_or_else(|| content_text.clone());
 
     Ok(Extracted {
+        lang: detect_language(&content_text),
         title,
         content_html: sanitize(&article.content),
         excerpt: truncate_chars(&excerpt, MAX_EXCERPT_CHARS),
         content_text,
+    })
+}
+
+/// Höchstens so viele Zeichen des Textes werden zur Spracherkennung verwendet.
+const LANG_SAMPLE_CHARS: usize = 4000;
+
+/// Erkennt die Sprache des Textes mit `whatlang` (Trigramme, ohne Modelldateien) und liefert
+/// den ISO-639-1-Code, wie ihn das HTML-Attribut `lang` braucht. Bei unsicherem Ergebnis
+/// (kurzer oder gemischter Text) oder einer Sprache ohne zweistelligen Code gibt es `None`:
+/// Eine falsche Angabe wäre schlechter als keine.
+pub fn detect_language(text: &str) -> Option<String> {
+    let end = text
+        .char_indices()
+        .nth(LANG_SAMPLE_CHARS)
+        .map_or(text.len(), |(i, _)| i);
+    let info = whatlang::detect(&text[..end])?;
+    if !info.is_reliable() {
+        return None;
+    }
+    iso639_1(info.lang().code()).map(str::to_owned)
+}
+
+/// ISO 639-3 (whatlang) nach ISO 639-1 (HTML `lang`); alle Sprachen, die whatlang kennt.
+fn iso639_1(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "epo" => "eo",
+        "eng" => "en",
+        "rus" => "ru",
+        "cmn" => "zh",
+        "spa" => "es",
+        "por" => "pt",
+        "ita" => "it",
+        "ben" => "bn",
+        "fra" => "fr",
+        "deu" => "de",
+        "ukr" => "uk",
+        "kat" => "ka",
+        "ara" => "ar",
+        "hin" => "hi",
+        "jpn" => "ja",
+        "heb" => "he",
+        "yid" => "yi",
+        "pol" => "pl",
+        "amh" => "am",
+        "jav" => "jv",
+        "kor" => "ko",
+        "nob" => "nb",
+        "dan" => "da",
+        "swe" => "sv",
+        "fin" => "fi",
+        "tur" => "tr",
+        "nld" => "nl",
+        "hun" => "hu",
+        "ces" => "cs",
+        "ell" => "el",
+        "bul" => "bg",
+        "bel" => "be",
+        "mar" => "mr",
+        "kan" => "kn",
+        "ron" => "ro",
+        "slv" => "sl",
+        "hrv" => "hr",
+        "srp" => "sr",
+        "mkd" => "mk",
+        "lit" => "lt",
+        "lav" => "lv",
+        "est" => "et",
+        "tam" => "ta",
+        "vie" => "vi",
+        "urd" => "ur",
+        "tha" => "th",
+        "guj" => "gu",
+        "uzb" => "uz",
+        "pan" => "pa",
+        "aze" => "az",
+        "ind" => "id",
+        "tel" => "te",
+        "pes" => "fa",
+        "mal" => "ml",
+        "ori" => "or",
+        "mya" => "my",
+        "nep" => "ne",
+        "sin" => "si",
+        "khm" => "km",
+        "tuk" => "tk",
+        "aka" => "ak",
+        "zul" => "zu",
+        "sna" => "sn",
+        "afr" => "af",
+        "lat" => "la",
+        "slk" => "sk",
+        "cat" => "ca",
+        "tgl" => "tl",
+        "hye" => "hy",
+        "cym" => "cy",
+        _ => return None,
     })
 }
 
@@ -321,5 +420,36 @@ mod tests {
             extract(&html, &base()).unwrap_err(),
             ExtractError::TooComplex
         );
+    }
+
+    #[test]
+    fn erkennt_die_sprache_des_textes() {
+        let de = "Die Bundesregierung hat am Mittwoch ein neues Gesetz beschlossen, das den Ausbau \
+                  der erneuerbaren Energien beschleunigen soll. Kritiker bemängeln, dass die \
+                  Finanzierung noch nicht geklärt sei und viele Fragen offen blieben.";
+        let en = "The government announced on Wednesday that it would speed up the expansion of \
+                  renewable energy. Critics say the funding has not yet been settled and that \
+                  many questions remain unanswered about how the plan will work in practice.";
+        assert_eq!(detect_language(de).as_deref(), Some("de"));
+        assert_eq!(detect_language(en).as_deref(), Some("en"));
+        // Zu kurz, leer oder ohne Buchstaben: unbekannt statt geraten.
+        assert_eq!(detect_language("Ja"), None);
+        assert_eq!(detect_language(""), None);
+        assert_eq!(detect_language("1234 5678 !!! ???"), None);
+    }
+
+    #[test]
+    fn jede_erkannte_sprache_hat_einen_gueltigen_code() {
+        for lang in whatlang::Lang::all() {
+            let code = iso639_1(lang.code())
+                .unwrap_or_else(|| panic!("kein ISO-639-1-Code für {}", lang.code()));
+            assert!((2..=3).contains(&code.len()) && code == code.to_lowercase());
+        }
+    }
+
+    #[test]
+    fn extract_liefert_die_sprache() {
+        let out = extract(&page("Titel", &paragraphs()), &base()).unwrap();
+        assert_eq!(out.lang.as_deref(), Some("de"));
     }
 }

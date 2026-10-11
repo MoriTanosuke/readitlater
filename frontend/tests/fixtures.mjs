@@ -23,3 +23,9 @@ export const KAFFEE = `<!doctype html><html><head><title>Kaffee und Bohnen</titl
 <article>
 ${Array.from({ length: 4 }, () => `<p>Kaffeebohnen werden geröstet, ein ausführlicher Absatz mit genug Text, damit die Extraktion ihn sicher als Hauptinhalt der Seite erkennt und nicht als Beiwerk verwirft.</p>`).join('\n')}
 </article><footer>Impressum</footer></body></html>`;
+
+/** Englischer Artikel (die Seite behauptet absichtlich lang="de"). */
+export const ENGLISCH = `<!doctype html><html lang="de"><head><title>English Article</title></head><body>
+<article>
+${Array.from({ length: 4 }, () => '<p>The government announced on Wednesday that it would speed up the expansion of renewable energy, but critics say that the funding has not been settled and many questions remain unanswered.</p>').join('\n')}
+</article></body></html>`;
