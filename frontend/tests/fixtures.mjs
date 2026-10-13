@@ -17,6 +17,12 @@ export const ARTIKEL = `<!doctype html><html><head><title>E2E Testartikel</title
 <img src="https://example.org/bild.png" onerror="steal()">
 </article><footer>Impressum</footer></body></html>`;
 
+/** Langer Artikel mit zwanzig gleich langen Absätzen (für die Leseposition). */
+export const LANG = `<!doctype html><html><head><title>Langer Artikel</title></head><body>
+<article>
+${Array.from({ length: 20 }, (_, i) => `<p>Absatz ${String(i + 1).padStart(2, '0')}: ${PARAGRAPH}</p>`).join('\n')}
+</article></body></html>`;
+
 /** Zweiter Artikel mit eigenem Suchwort („Kaffeebohnen“). */
 export const KAFFEE = `<!doctype html><html><head><title>Kaffee und Bohnen</title></head><body>
 <nav><a href="/">Start</a></nav>

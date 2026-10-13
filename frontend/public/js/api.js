@@ -13,8 +13,9 @@ const TIMEOUT_MS = 20_000; // schlechte Verbindung: lieber früh aufgeben als en
 /**
  * raw: body ist schon fertig (z. B. eine Datei) und wird unverändert als JSON gesendet.
  * timeoutMs: nach dieser Zeit gilt der Server als nicht erreichbar (ApiError mit Status 0).
+ * keepalive: die Anfrage läuft auch weiter, wenn die Seite gerade geschlossen wird.
  */
-async function request(method, path, body, raw = false, timeoutMs = TIMEOUT_MS) {
+async function request(method, path, body, raw = false, timeoutMs = TIMEOUT_MS, keepalive = false) {
   const headers = { 'X-Requested-With': 'fetch' }; // CSRF-Schutz im Backend
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -30,6 +31,7 @@ async function request(method, path, body, raw = false, timeoutMs = TIMEOUT_MS) 
         body: body === undefined || raw ? body : JSON.stringify(body),
         credentials: 'same-origin',
         signal: controller.signal,
+        keepalive,
       });
     } catch {
       throw unreachable();
@@ -78,8 +80,9 @@ export const api = {
     return request('GET', `/articles?${params}`);
   },
   listTags: () => request('GET', '/tags'),
-  /** changes: { is_read?, tags? } */
-  updateArticle: (id, changes) => request('PATCH', `/articles/${encodeURIComponent(id)}`, changes),
+  /** changes: { is_read?, tags?, read_pos? }; options: { keepalive } */
+  updateArticle: (id, changes, { keepalive = false } = {}) =>
+    request('PATCH', `/articles/${encodeURIComponent(id)}`, changes, false, TIMEOUT_MS, keepalive),
   // Der Server lädt die Seite selbst, das dauert länger als eine normale Anfrage.
   addArticle: (url) => request('POST', '/articles', { url }, false, 60_000),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),

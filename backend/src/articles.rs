@@ -24,6 +24,9 @@ const DEFAULT_LIMIT: i64 = 50;
 const MAX_LIMIT: i64 = 200;
 const MAX_QUERY_LEN: usize = 200;
 const MAX_QUERY_WORDS: usize = 10;
+/// Obergrenze für die Leseposition. Der Server kennt die Textlänge des dargestellten Artikels
+/// nicht (Import erlaubt bis zu 4 MiB je Artikel), die Grenze fängt nur Unsinn ab.
+const MAX_READ_POS: i64 = 10_000_000;
 
 #[derive(Deserialize)]
 pub struct NewArticle {
@@ -42,12 +45,15 @@ pub struct ListParams {
     read: Option<bool>,
 }
 
-/// Teilweise Änderung eines Artikels: Gelesen-Status und/oder Schlagwörter
-/// (die Liste ersetzt die bisherigen Schlagwörter vollständig).
+/// Teilweise Änderung eines Artikels: Gelesen-Status, Schlagwörter (die Liste ersetzt die
+/// bisherigen Schlagwörter vollständig) und/oder Leseposition.
 #[derive(Deserialize)]
 pub struct ArticlePatch {
     is_read: Option<bool>,
     tags: Option<Vec<String>>,
+    /// Textoffset der Leseposition, 0 = Anfang. Bei einem gelesenen Artikel (auch wenn er mit
+    /// derselben Anfrage als gelesen markiert wird) gilt immer 0.
+    read_pos: Option<i64>,
 }
 
 /// Kurzform für die Liste (ohne den vollen Text).
@@ -76,6 +82,8 @@ pub struct ArticleFull {
     /// Sprache des Textes (ISO 639-1), `null` wenn unbekannt.
     lang: Option<String>,
     is_read: bool,
+    /// Leseposition (Textoffset), 0 = am Anfang beginnen.
+    read_pos: i64,
     created_at: String,
     tags: Vec<String>,
     /// Markierungen und Notizen, damit der Lesemodus (und der Offline-Speicher) mit einer
@@ -119,6 +127,7 @@ struct FullRow {
     content: String,
     lang: Option<String>,
     is_read: bool,
+    read_pos: i64,
     created_at: String,
     tags: String,
 }
@@ -133,6 +142,7 @@ impl From<FullRow> for ArticleFull {
             content: row.content,
             lang: row.lang,
             is_read: row.is_read,
+            read_pos: row.read_pos,
             created_at: row.created_at,
             tags: parse_tags(&row.tags),
             highlights: Vec::new(),
@@ -326,7 +336,8 @@ pub async fn show(
     Path(id): Path<i64>,
 ) -> Result<Json<ArticleFull>, ApiError> {
     let article = sqlx::query_as::<_, FullRow>(
-        "SELECT a.id, a.url, a.title, a.excerpt, a.content, a.lang, a.is_read, a.created_at, \
+        "SELECT a.id, a.url, a.title, a.excerpt, a.content, a.lang, a.is_read, a.read_pos, \
+                a.created_at, \
                 (SELECT json_group_array(name) FROM ( \
                     SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
                     WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
@@ -344,7 +355,7 @@ pub async fn show(
     Ok(Json(full))
 }
 
-/// `PATCH /api/articles/{id}`: Gelesen-Status und/oder Schlagwörter ändern.
+/// `PATCH /api/articles/{id}`: Gelesen-Status, Schlagwörter und/oder Leseposition ändern.
 pub async fn update(
     State(state): State<AppState>,
     user: AuthUser,
@@ -352,6 +363,13 @@ pub async fn update(
     ApiJson(patch): ApiJson<ArticlePatch>,
 ) -> Result<Json<ArticleSummary>, ApiError> {
     let new_tags = patch.tags.as_deref().map(tags::normalize).transpose()?;
+    if let Some(pos) = patch.read_pos
+        && !(0..=MAX_READ_POS).contains(&pos)
+    {
+        return Err(ApiError::BadRequest(format!(
+            "Die Leseposition muss zwischen 0 und {MAX_READ_POS} liegen"
+        )));
+    }
 
     let mut tx = state.pool.begin().await?;
     let owned: Option<i64> =
@@ -363,12 +381,22 @@ pub async fn update(
     if owned.is_none() {
         return Err(not_found());
     }
-    if let Some(is_read) = patch.is_read {
-        sqlx::query("UPDATE articles SET is_read = ? WHERE id = ?")
-            .bind(is_read)
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
+    if patch.is_read.is_some() || patch.read_pos.is_some() {
+        // Ein gelesener Artikel startet immer am Anfang: Das entscheidet die Datenbank in einer
+        // Anweisung mit dem Status, der danach gilt. So kann auch eine verspätete Positions-
+        // Anfrage (der Benutzer markiert gerade als gelesen) die Position nicht zurückbringen.
+        sqlx::query(
+            "UPDATE articles SET \
+                is_read = COALESCE(?1, is_read), \
+                read_pos = CASE WHEN COALESCE(?1, is_read) = 1 THEN 0 \
+                                ELSE COALESCE(?2, read_pos) END \
+             WHERE id = ?3",
+        )
+        .bind(patch.is_read)
+        .bind(patch.read_pos)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(names) = new_tags {
         tags::replace(&mut tx, user.id, id, &names).await?;
