@@ -1,6 +1,7 @@
 import { api, ApiError } from './api.js';
 import { createHighlighter } from './highlights.js';
 import * as offline from './offline.js';
+import { createPositionTracker } from './position.js';
 import { mountControls } from './reading.js';
 import { renderSafeHtml, safeUrl } from './safe-html.js';
 
@@ -28,12 +29,14 @@ let lastSync = 0; // Zeitpunkt (ms) des letzten Abgleichs mit dem Server
 let pendingShare = takeSharedUrl(); // Adresse, die per „Teilen“ an die App gesendet wurde
 
 const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthError(error) });
+const position = createPositionTracker({ root: $('reader-content'), save: saveReadingPosition });
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
 
 function show(view) {
+  if (view !== 'reader') position.end(); // vor dem Ausblenden: danach lässt sich nichts mehr messen
   if (view !== 'reader') highlighter.reset();
   if (view !== 'reader') setReadingPanel(false);
   for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
@@ -128,6 +131,7 @@ function handleAuthError(error) {
 }
 
 function endSession() {
+  position.cancel(); // ohne Sitzung lässt sich nichts mehr speichern
   offline.clearAll(); // gespeicherte Artikel gehören zur Sitzung und verschwinden mit ihr
   setOfflineBanner(false);
   lastSync = 0;
@@ -669,6 +673,9 @@ async function setRead(article, isRead) {
 }
 
 function mergeUpdated(updated) {
+  // Gelesene Artikel starten oben (auch das Backend setzt die Position dann zurück). Die
+  // gespeicherte Kopie soll das ebenfalls wissen, sonst springt sie beim nächsten Öffnen kurz.
+  if (updated.is_read === true) offline.setPosition(updated.id, 0);
   const index = articles.findIndex((a) => a.id === updated.id);
   if (index === -1) return;
   const wanted = filter.read === '' ? null : filter.read === 'true';
@@ -807,9 +814,27 @@ function renderArticle(article) {
   updateReaderControls();
   $('form-tags').hidden = false;
   highlighter.open(article.id, article.highlights);
+  position.begin(article); // springt zur gemerkten Stelle und merkt sich die weiteren
+}
+
+/**
+ * Merkt die Leseposition still im Hintergrund: Der Benutzer soll davon nichts mitbekommen, also
+ * keine Meldung bei Fehlern. Ohne Verbindung wird sie vorgemerkt und beim Abgleich gesendet;
+ * alles andere (z. B. zu viele Anfragen) erledigt sich mit der nächsten Position.
+ */
+async function saveReadingPosition(id, pos, options) {
+  offline.setPosition(id, pos); // die gespeicherte Kopie soll auch ohne Netz stimmen
+  try {
+    await api.updateArticle(id, { read_pos: pos }, options);
+    offline.dropQueuedPosition(id);
+  } catch (error) {
+    if (isUnreachable(error)) offline.queueChange(id, { read_pos: pos });
+    else handleAuthError(error);
+  }
 }
 
 async function openReader(id) {
+  position.end(); // Position des vorigen Artikels sichern, bevor sein Text verschwindet
   const token = ++routeToken;
   show('reader');
   window.scrollTo(0, 0);
@@ -834,6 +859,8 @@ async function openReader(id) {
       updateReaderControls();
       highlighter.open(article.id, article.highlights);
     }
+    // Der Server kennt vielleicht eine neuere Stelle (auf einem anderen Gerät weitergelesen).
+    if (readerArticle?.id === article.id) position.adopt(article);
   } catch (error) {
     if (token !== routeToken) return;
     if (handleAuthError(error)) return;
@@ -862,6 +889,7 @@ function updateReaderControls() {
 /** Übernimmt die Antwort des Backends für den geöffneten Artikel. */
 function applyReaderUpdate(updated) {
   readerArticle = { ...readerArticle, is_read: updated.is_read, tags: updated.tags };
+  position.setEnabled(!updated.is_read); // gelesen: oben beginnen, nichts mehr merken
   mergeUpdated(updated);
   tagsStale = true;
   if (filterActive()) listLoaded = false; // Liste beim Zurückgehen neu laden
@@ -883,6 +911,7 @@ async function patchReader(changes, button, errorElement) {
       // Ohne Verbindung vormerken, der Abgleich sendet es später.
       await offline.queueRead(readerArticle.id, changes.is_read);
       readerArticle = { ...readerArticle, is_read: changes.is_read };
+      position.setEnabled(!changes.is_read);
       mergeUpdated({ id: readerArticle.id, is_read: changes.is_read });
       listLoaded = false;
       updateReaderControls();
@@ -909,6 +938,7 @@ $('form-tags').addEventListener('submit', (event) => {
 $('reader-delete').addEventListener('click', async () => {
   if (!readerArticle) return;
   if (await removeArticle(readerArticle.id, readerArticle.title)) {
+    position.cancel(); // den gelöschten Artikel braucht keine Position mehr
     resetHash();
     route();
   }

@@ -65,6 +65,10 @@ Im Lesemodus öffnet der Knopf „Aa“ ein Bedienfeld, im Konto-Menü gibt es z
 
 Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder einer eigenen Farbe markieren. Ein Klick auf eine Markierung öffnet das Bedienfeld: Farbe ändern, optionale Notiz schreiben, Markierung löschen. Notizen stehen neben dem Text (auf schmalen Bildschirmen darunter). „Markierungen ausblenden“ zeigt den Artikel ohne Farben und Notizen.
 
+## Leseposition
+
+Die Leseliste merkt sich still, wo du in einem ungelesenen Artikel stehst, und springt beim erneuten Öffnen dorthin zurück, auch auf einem anderen Gerät oder mit anderer Schriftgröße. Es gibt dafür keine Bedienung und keine Anzeige. Der Artikel beginnt wieder oben, wenn du ihn als gelesen markierst oder bis zum Ende des Textes gescrollt hast (sobald das Textende im Fenster zu sehen ist). Gelesene Artikel starten immer oben. Ohne Verbindung wird die Stelle vorgemerkt und später übertragen.
+
 ## Installieren und offline lesen (PWA)
 
 Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“ bzw. „App installieren“) und gespeicherte Artikel auch ohne Internet lesen, zum Beispiel im Zug.
@@ -72,7 +76,7 @@ Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinz
 **Wichtig: Das funktioniert nur über HTTPS.** Browser erlauben den dafür nötigen Service Worker nur auf `localhost` und auf HTTPS-Adressen. Über reines HTTP (z. B. im Heimnetz ohne Proxy) läuft die App normal, aber ohne Installation und ohne Start ohne Netz. Dein Caddy mit einer Domain und Zertifikat erfüllt das. Hinter Tailscale geht es mit `tailscale serve` und dem HTTPS-Namen des Geräts. Lokal funktioniert `http://localhost:3000`.
 
 - Das Gerät speichert die 30 neuesten ungelesenen Artikel samt Markierungen und Notizen und jeden Artikel, den du geöffnet hast (14 Tage, höchstens 30). Der Abgleich läuft beim Öffnen der Liste im Hintergrund, unter „Offline-Lesen“ im Konto-Menü lässt er sich auch von Hand starten, ausschalten oder löschen.
-- Ohne Verbindung (oder bei sehr schlechter) siehst du die gespeicherten Artikel, kannst sie lesen, durchsuchen und als gelesen markieren. Das Markieren wird nachgeholt, sobald wieder Verbindung besteht. Neue Artikel speichern, Schlagwörter, Markierungen und Notizen ändern braucht eine Verbindung.
+- Ohne Verbindung (oder bei sehr schlechter) siehst du die gespeicherten Artikel, kannst sie lesen, durchsuchen und als gelesen markieren. Das Markieren und die Leseposition werden nachgeholt, sobald wieder Verbindung besteht. Neue Artikel speichern, Schlagwörter, Markierungen und Notizen ändern braucht eine Verbindung.
 - Die Artikel liegen nur in diesem Browser. Beim Abmelden werden sie vom Gerät gelöscht. Abmelden geht deshalb nur mit Verbindung.
 - Android: In der installierten App erscheint die Leseliste im Teilen-Menü anderer Apps. Das Teilen speichert den Artikel nach der Anmeldung. iPhone und iPad unterstützen das nicht, dort bleibt der Kurzbefehl (siehe oben).
 

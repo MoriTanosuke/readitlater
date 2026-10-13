@@ -5,8 +5,9 @@
 // Schnittstelle liefert. Alles wird beim Abmelden, bei abgelaufener Sitzung und beim
 // Kontolöschen entfernt und beim Anmelden eines anderen Benutzers verworfen.
 //
-// Offline geändert werden kann nur der Gelesen-Status; er wird vorgemerkt und beim nächsten
-// Abgleich gesendet. Alle anderen Änderungen brauchen eine Verbindung.
+// Offline geändert werden kann nur der Gelesen-Status und die Leseposition; sie werden
+// vorgemerkt und beim nächsten Abgleich gesendet. Alle anderen Änderungen brauchen eine
+// Verbindung.
 //
 // Der Speicher ist eine Bequemlichkeit: Ist IndexedDB nicht verfügbar (z. B. im privaten
 // Modus), arbeitet die App wie bisher und alle Funktionen hier liefern leere Ergebnisse.
@@ -167,6 +168,7 @@ export async function putArticle(article, { opened = false } = {}) {
     content: article.content,
     lang: article.lang ?? null,
     is_read: article.is_read,
+    read_pos: article.read_pos ?? 0,
     created_at: article.created_at,
     tags: article.tags ?? [],
     highlights: article.highlights ?? [],
@@ -202,7 +204,7 @@ export async function list(filter = {}) {
       return words.every((w) => haystack.includes(w));
     })
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id));
-  return items.map(({ content, lang, highlights, opened_at, ...summary }) => summary);
+  return items.map(({ content, lang, highlights, opened_at, read_pos, ...summary }) => summary);
 }
 
 /** Schlagwörter mit Anzahl über die gespeicherten Artikel. */
@@ -215,18 +217,69 @@ export async function tagCounts() {
 }
 
 // ---------------------------------------------------------------------------
-// Gelesen-Status ohne Verbindung
+// Gelesen-Status und Leseposition ohne Verbindung
 // ---------------------------------------------------------------------------
 
-/** Merkt eine Änderung des Gelesen-Status vor und übernimmt sie in die gespeicherte Kopie. */
-export async function queueRead(id, isRead) {
+/**
+ * Merkt Änderungen vor (`is_read` und/oder `read_pos`), die sich ohne Verbindung nicht senden
+ * ließen, und übernimmt sie in die gespeicherte Kopie. Je Artikel gilt die letzte Änderung.
+ * Ein gelesener Artikel hat die Position 0 (wie im Backend).
+ */
+export async function queueChange(id, changes) {
+  const applied = { ...changes };
+  if (applied.is_read === true) applied.read_pos = 0;
   await safely(
     () =>
       transact(['articles', 'queue'], 'readwrite', (articles, queue) => {
-        queue.put({ id, is_read: isRead });
+        const pending = queue.get(id);
+        pending.onsuccess = () => {
+          const entry = { ...(pending.result ?? {}), ...changes, id };
+          if (entry.is_read === true) entry.read_pos = 0;
+          queue.put(entry);
+        };
         const request = articles.get(id);
         request.onsuccess = () => {
-          if (request.result) articles.put({ ...request.result, is_read: isRead });
+          if (request.result) articles.put({ ...request.result, ...applied });
+        };
+      }),
+    null,
+  );
+}
+
+/** Merkt eine Änderung des Gelesen-Status vor und übernimmt sie in die gespeicherte Kopie. */
+export function queueRead(id, isRead) {
+  return queueChange(id, { is_read: isRead });
+}
+
+/** Übernimmt die Leseposition in die gespeicherte Kopie (falls es eine gibt). */
+export function setPosition(id, pos) {
+  return safely(
+    () =>
+      transact(['articles'], 'readwrite', (articles) => {
+        const request = articles.get(id);
+        request.onsuccess = () => {
+          if (request.result) articles.put({ ...request.result, read_pos: pos });
+        };
+      }),
+    null,
+  );
+}
+
+/**
+ * Eine direkt gesendete Position ersetzt die vorgemerkte; sonst würde der Abgleich später die
+ * ältere nachsenden und die neuere überschreiben.
+ */
+export function dropQueuedPosition(id) {
+  return safely(
+    () =>
+      transact(['queue'], 'readwrite', (queue) => {
+        const pending = queue.get(id);
+        pending.onsuccess = () => {
+          const entry = pending.result;
+          if (!entry || entry.read_pos === undefined) return;
+          const { read_pos, ...rest } = entry;
+          if (rest.is_read === undefined) queue.delete(id);
+          else queue.put(rest);
         };
       }),
     null,
@@ -267,7 +320,10 @@ async function runSync(api) {
   try {
     for (const change of await pendingReads()) {
       try {
-        await api.updateArticle(change.id, { is_read: change.is_read });
+        const body = {};
+        if (change.is_read !== undefined) body.is_read = change.is_read;
+        if (change.read_pos !== undefined) body.read_pos = change.read_pos;
+        await api.updateArticle(change.id, body);
         result.flushed += 1;
       } catch (error) {
         if (!(error instanceof ApiError && error.status === 404)) throw error;
