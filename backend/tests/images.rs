@@ -300,7 +300,14 @@ async fn bilder_werden_im_hintergrund_geholt_verkleinert_und_ausgeliefert() {
     assert_eq!(rows.len(), 4, "{rows:?}");
     assert!(rows.iter().all(|(_, s)| s == "pending"));
 
+    // Die Liste nennt die Zahl fertiger Bilder (der Offline-Abgleich lädt danach neu).
+    let list = get(&env.app, "/api/articles", Some(&cookie)).await;
+    assert_eq!(list.body[0]["image_count"], 0);
+
     assert_eq!(images::process_pending(&env.state).await, 4);
+
+    let list = get(&env.app, "/api/articles", Some(&cookie)).await;
+    assert_eq!(list.body[0]["image_count"], 2, "nur fertige Bilder zählen");
 
     let rows = statuses(&env, id).await;
     assert_eq!(status_of(&rows, "/bild/gross.jpg"), "done");

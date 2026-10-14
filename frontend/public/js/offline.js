@@ -9,6 +9,12 @@
 // vorgemerkt und beim nächsten Abgleich gesendet. Alle anderen Änderungen brauchen eine
 // Verbindung.
 //
+// Die verkleinerten Bilder der gespeicherten Artikel liegen im Cache-Speicher des Browsers
+// (Cache API, Name `leseliste-images`), nicht im normalen HTTP-Cache, den der Browser nach
+// Belieben räumt. Geschrieben wird nur hier; der Service Worker (sw.js) liest sie für genau die
+// Adressen `/api/articles/{id}/images/{id}` und holt nie selbst etwas. Sie werden mit allem
+// anderen gelöscht (Abmelden, abgelaufene Sitzung, Kontolöschen, anderer Benutzer).
+//
 // Der Speicher ist eine Bequemlichkeit: Ist IndexedDB nicht verfügbar (z. B. im privaten
 // Modus), arbeitet die App wie bisher und alle Funktionen hier liefern leere Ergebnisse.
 
@@ -17,6 +23,10 @@ import { ApiError } from './api.js';
 const DB_NAME = 'leseliste-offline';
 const DB_VERSION = 1;
 const ENABLED_KEY = 'leseliste.offline.enabled';
+/** Cache der Bilder; sw.js liest ihn unter demselben Namen. */
+export const IMAGE_CACHE = 'leseliste-images';
+const IMAGE_PATH = /^\/api\/articles\/\d+\/images\/\d+$/;
+const IMAGE_TIMEOUT_MS = 30_000;
 
 /** Wie viele der neuesten ungelesenen Artikel automatisch bereitgehalten werden. */
 export const UNREAD_LIMIT = 30;
@@ -121,8 +131,8 @@ export async function adopt(user) {
   );
 }
 
-export function clearAll() {
-  return safely(
+export async function clearAll() {
+  await safely(
     () =>
       transact(['meta', 'articles', 'queue'], 'readwrite', (meta, articles, queue) => {
         meta.clear();
@@ -131,6 +141,79 @@ export function clearAll() {
       }),
     null,
   );
+  await safely(async () => {
+    if (typeof caches !== 'undefined') await caches.delete(IMAGE_CACHE);
+  }, null);
+}
+
+// ---------------------------------------------------------------------------
+// Bilder
+// ---------------------------------------------------------------------------
+
+async function openImageCache() {
+  return safely(async () => (typeof caches === 'undefined' ? null : await caches.open(IMAGE_CACHE)), null);
+}
+
+/** Adressen der lokal abgelegten Bilder eines Artikels (nur die erwartete Form). */
+function imageSrcs(article) {
+  return Object.values(article?.images ?? {})
+    .map((image) => image?.src)
+    .filter((src) => typeof src === 'string' && IMAGE_PATH.test(src));
+}
+
+/**
+ * Legt die Bilder eines Artikels im Cache ab, soweit sie dort noch fehlen. Ohne Verbindung,
+ * bei vollem Speicher oder ohne Cache-Unterstützung endet es still. Gibt die Zahl neu
+ * abgelegter Bilder zurück.
+ */
+export async function cacheImages(article) {
+  if (!isEnabled()) return 0;
+  const cache = await openImageCache();
+  if (!cache) return 0;
+  let added = 0;
+  for (const src of imageSrcs(article)) {
+    try {
+      if (await cache.match(src)) continue;
+      const response = await fetch(src, {
+        credentials: 'same-origin',
+        signal: AbortSignal.timeout?.(IMAGE_TIMEOUT_MS),
+      });
+      const type = response.headers.get('content-type') ?? '';
+      if (!response.ok || !type.startsWith('image/')) continue; // dieses Bild gibt es (noch) nicht
+      await cache.put(src, response);
+      added += 1;
+    } catch {
+      return added; // keine Verbindung oder Speicher voll: beim nächsten Abgleich weiter
+    }
+  }
+  return added;
+}
+
+/** Entfernt die Bilder eines Artikels aus dem Cache. */
+async function dropImages(article) {
+  const cache = await openImageCache();
+  if (!cache) return;
+  for (const src of imageSrcs(article)) await safely(() => cache.delete(src), null);
+}
+
+/**
+ * Hält den Bilder-Cache im Takt mit den gespeicherten Artikeln: Fehlendes wird geholt, alles,
+ * was zu keinem gespeicherten Artikel mehr gehört, wird entfernt.
+ */
+async function syncImages() {
+  const articles = await allArticles();
+  const cache = await openImageCache();
+  if (!cache) return 0;
+  const wanted = new Set(articles.flatMap(imageSrcs));
+  await safely(async () => {
+    for (const request of await cache.keys()) {
+      const key = new URL(request.url).pathname;
+      if (!wanted.has(key)) await cache.delete(request);
+    }
+  }, null);
+  let added = 0;
+  for (const article of articles) added += await cacheImages(article);
+  return added;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +228,9 @@ function allArticles() {
   return safely(() => transact(['articles'], 'readonly', (a) => a.getAll()), []).then((list) => list ?? []);
 }
 
-export function remove(id) {
+export async function remove(id) {
+  const article = await getArticle(id);
+  if (article) await dropImages(article);
   return safely(
     () =>
       transact(['articles', 'queue'], 'readwrite', (articles, queue) => {
@@ -317,7 +402,7 @@ export function sync(api) {
 }
 
 async function runSync(api) {
-  const result = { stored: 0, removed: 0, flushed: 0, offline: false, skipped: false };
+  const result = { stored: 0, removed: 0, flushed: 0, images: 0, offline: false, skipped: false };
   try {
     for (const change of await pendingReads()) {
       try {
@@ -338,6 +423,15 @@ async function runSync(api) {
     const wanted = new Set(unread.map((a) => a.id));
     for (const summary of unread) {
       const stored = await getArticle(summary.id);
+      if (stored && (summary.image_count ?? 0) !== Object.keys(stored.images ?? {}).length) {
+        // Inzwischen sind Bilder fertig geworden (oder weggefallen): den Artikel neu holen.
+        try {
+          await putArticle(await api.getArticle(summary.id));
+        } catch (error) {
+          if (!(error instanceof ApiError && error.status === 404)) throw error;
+        }
+        continue;
+      }
       if (stored) {
         // Status, Titel und Schlagwörter können sich geändert haben; der Inhalt nicht.
         await putArticle({ ...stored, ...summary, content: stored.content, highlights: stored.highlights, images: stored.images });
@@ -351,6 +445,7 @@ async function runSync(api) {
       }
     }
     result.removed = await prune(wanted);
+    result.images = await syncImages();
   } catch (error) {
     if (error instanceof ApiError && error.status === 0) result.offline = true;
     else throw error;
