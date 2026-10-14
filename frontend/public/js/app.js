@@ -7,6 +7,7 @@ import { mountControls } from './reading.js';
 import { applyLocalImages, renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
+const READ_FILTER_KEY = 'leseliste-read-filter';
 const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline', 'display'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
@@ -19,7 +20,7 @@ let articles = []; // bereits geladene Artikel der Liste
 let hasMore = false;
 let listLoaded = false;
 let listToken = 0; // verwirft veraltete Listenantworten
-let filter = { q: '', read: '', tag: '' };
+let filter = { q: '', read: loadReadFilter(), tag: '' };
 let tags = []; // Schlagwörter mit Anzahl
 let tagsStale = true;
 let pendingNotice = ''; // einmalige Meldung für die Liste (z. B. nach Passwortänderung)
@@ -139,6 +140,25 @@ function handleAuthError(error) {
   return false;
 }
 
+// Die Auswahl Alle/Ungelesen/Gelesen gilt pro Gerät (nur Bequemlichkeit, kein Nutzerdatum).
+function loadReadFilter() {
+  try {
+    const value = window.localStorage.getItem(READ_FILTER_KEY);
+    return value === 'true' || value === 'false' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function saveReadFilter(value) {
+  try {
+    if (value) window.localStorage.setItem(READ_FILTER_KEY, value);
+    else window.localStorage.removeItem(READ_FILTER_KEY);
+  } catch {
+    // Speicher gesperrt oder voll: die Auswahl gilt dann nur bis zum Neuladen.
+  }
+}
+
 function endSession() {
   position.cancel(); // ohne Sitzung lässt sich nichts mehr speichern
   offline.clearAll(); // gespeicherte Artikel gehören zur Sitzung und verschwinden mit ihr
@@ -149,7 +169,7 @@ function endSession() {
   hasMore = false;
   listLoaded = false;
   listToken += 1;
-  filter = { q: '', read: '', tag: '' };
+  filter = { q: '', read: loadReadFilter(), tag: '' };
   tags = [];
   tagsStale = true;
   pendingNotice = '';
@@ -606,6 +626,7 @@ $('filter-q').addEventListener('input', () => {
 });
 $('filter-read').addEventListener('change', () => {
   filter.read = $('filter-read').value;
+  saveReadFilter(filter.read);
   applyFilter();
 });
 
@@ -750,12 +771,14 @@ $('form-add').addEventListener('submit', async (event) => {
   try {
     const article = await withBusy($('add-submit'), () => api.addArticle(url));
     input.value = '';
-    if (filterActive()) {
-      // Der neue Artikel passt vielleicht nicht zum Filter: Filter zurücksetzen.
-      filter = { q: '', read: '', tag: '' };
+    if (filter.q || filter.tag) {
+      // Suche und Schlagwort passen vielleicht nicht zum neuen Artikel: zurücksetzen.
+      // Die Auswahl Alle/Ungelesen/Gelesen bleibt, wie der Benutzer sie gewählt hat.
+      filter = { q: '', read: filter.read, tag: '' };
       $('filter-q').value = '';
-      $('filter-read').value = '';
       applyFilter();
+    } else if (filter.read === 'true') {
+      showNotice('Artikel gespeichert. Er ist ungelesen und steht unter „Alle“ oder „Ungelesen“.');
     } else {
       articles.unshift(article);
       renderList();
