@@ -65,6 +65,10 @@ Im Lesemodus öffnet der Knopf „Aa“ ein Bedienfeld, im Konto-Menü gibt es z
 
 Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder einer eigenen Farbe markieren. Ein Klick auf eine Markierung öffnet das Bedienfeld: Farbe ändern, optionale Notiz schreiben, Markierung löschen. Notizen stehen neben dem Text (auf schmalen Bildschirmen darunter). „Markierungen ausblenden“ zeigt den Artikel ohne Farben und Notizen.
 
+## Lesefilter
+
+Die Auswahl Alle/Ungelesen/Gelesen über der Liste merkt sich das Gerät. Sie bleibt nach dem Speichern eines Artikels, beim Neuladen und nach erneutem Anmelden erhalten. Nur Suchtext und Schlagwort werden nach dem Speichern zurückgesetzt.
+
 ## Leseposition
 
 Die Leseliste merkt sich still, wo du in einem ungelesenen Artikel stehst, und springt beim erneuten Öffnen dorthin zurück, auch auf einem anderen Gerät oder mit anderer Schriftgröße. Es gibt dafür keine Bedienung und keine Anzeige. Der Artikel beginnt wieder oben, wenn du ihn als gelesen markierst oder bis zum Ende des Textes gescrollt hast (sobald das Textende im Fenster zu sehen ist). Gelesene Artikel starten immer oben. Ohne Verbindung wird die Stelle vorgemerkt und später übertragen.
