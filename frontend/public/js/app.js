@@ -4,7 +4,7 @@ import { createHighlighter } from './highlights.js';
 import * as offline from './offline.js';
 import { createPositionTracker } from './position.js';
 import { mountControls } from './reading.js';
-import { renderSafeHtml, safeUrl } from './safe-html.js';
+import { applyLocalImages, renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline', 'display'];
@@ -790,6 +790,7 @@ function clearReaderView() {
   $('reader-content').replaceChildren();
   highlighter.reset();
   $('reader-delete').hidden = true;
+  $('reader-refresh-images').hidden = true;
   $('reader-toggle-read').hidden = true;
   $('form-tags').hidden = true;
   clearError($('reader-error'));
@@ -817,7 +818,8 @@ function renderArticle(article) {
   }
   meta.append(` · gespeichert am ${formatDate(article.created_at)}`);
 
-  renderSafeHtml($('reader-content'), article.content, article.url);
+  renderSafeHtml($('reader-content'), article.content, article.url, article.images);
+  updateImageRefresh(article);
   setArticleLang(article.lang);
   $('reader-delete').hidden = false;
   updateReaderControls();
@@ -841,6 +843,16 @@ async function saveReadingPosition(id, pos, options) {
     if (isUnreachable(error)) offline.queueChange(id, { read_pos: pos });
     else handleAuthError(error);
   }
+}
+
+/**
+ * Tauscht inzwischen lokal vorliegende Bilder ein und zeigt „Bilder nachladen“ nur dann, wenn
+ * noch Bilder von der Originaladresse kommen (bei älteren, importierten oder gescheiterten).
+ */
+function updateImageRefresh(article) {
+  const remote = applyLocalImages($('reader-content'), article.images);
+  $('reader-refresh-images').hidden = remote === 0;
+  return remote;
 }
 
 async function openReader(id) {
@@ -868,6 +880,8 @@ async function openReader(id) {
       readerArticle = article;
       updateReaderControls();
       highlighter.open(article.id, article.highlights);
+      // Der Text bleibt, aber vielleicht liegen Bilder inzwischen lokal vor.
+      updateImageRefresh(article);
     }
     // Der Server kennt vielleicht eine neuere Stelle (auf einem anderen Gerät weitergelesen).
     if (readerArticle?.id === article.id) position.adopt(article);
@@ -936,6 +950,38 @@ async function patchReader(changes, button, errorElement) {
 $('reader-toggle-read').addEventListener('click', () => {
   if (readerArticle) {
     patchReader({ is_read: !readerArticle.is_read }, $('reader-toggle-read'), $('tags-error'));
+  }
+});
+
+$('reader-refresh-images').addEventListener('click', async () => {
+  if (!readerArticle) return;
+  const { id } = readerArticle;
+  const token = routeToken;
+  const button = $('reader-refresh-images');
+  clearError($('reader-error'));
+  try {
+    await withBusy(button, () => api.refreshImages(id));
+    $('reader-notice').textContent = 'Die Bilder werden im Hintergrund geladen …';
+    $('reader-notice').hidden = false;
+    // Der Server arbeitet im Hintergrund: ein paar Mal nachsehen, solange der Artikel offen ist.
+    let remote = 1;
+    for (let attempt = 0; attempt < 6 && remote > 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (token !== routeToken) return;
+      const article = await api.getArticle(id);
+      if (token !== routeToken) return;
+      readerArticle = { ...readerArticle, images: article.images };
+      offline.putArticle(article, { opened: true });
+      remote = updateImageRefresh(article);
+    }
+    $('reader-notice').textContent =
+      remote === 0
+        ? 'Alle Bilder liegen jetzt auf dem Server.'
+        : 'Nicht alle Bilder ließen sich laden. Später kann man es noch einmal versuchen.';
+  } catch (error) {
+    if (token !== routeToken || handleAuthError(error)) return;
+    $('reader-notice').hidden = true;
+    showError($('reader-error'), error.message);
   }
 });
 

@@ -87,6 +87,9 @@ export const api = {
   addArticle: (url) => request('POST', '/articles', { url }, false, 60_000),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
   deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),
+  /** Bilder des Artikels (erneut) lokal ablegen lassen; die Antwort nennt die Zahl offener Bilder. */
+  refreshImages: (id) =>
+    request('POST', `/articles/${encodeURIComponent(id)}/refresh-images`, {}),
   listHighlights: (articleId) =>
     request('GET', `/articles/${encodeURIComponent(articleId)}/highlights`),
   /** highlight: { start, end, quote, prefix, suffix, color, note? } */

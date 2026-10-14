@@ -34,12 +34,17 @@ function freePort() {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Kleiner Webserver, der feste Seiten ausliefert: { '/artikel.html': '<html>…' }. */
+/** Kleiner Webserver, der feste Seiten ausliefert: { '/artikel.html': '<html>…' } (Dateien als { type, body }). */
 export async function startSite(pages) {
   const server = createServer((request, response) => {
     const page = pages[request.url];
     if (page === undefined) {
       response.writeHead(404).end('nicht gefunden');
+      return;
+    }
+    if (typeof page === 'object') {
+      // Dateien (Bilder): { type: 'image/png', body: Buffer }
+      response.writeHead(200, { 'content-type': page.type }).end(page.body);
       return;
     }
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page);
