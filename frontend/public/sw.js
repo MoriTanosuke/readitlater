@@ -19,6 +19,7 @@ const SHELL = [
   '/manifest.webmanifest',
   '/js/api.js',
   '/js/app.js',
+  '/js/backlink.js',
   '/js/highlights.js',
   '/js/offline.js',
   '/js/position.js',

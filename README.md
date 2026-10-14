@@ -69,6 +69,10 @@ Im Lesemodus lässt sich Text auswählen und mit einer von fünf Farben oder ein
 
 Die Leseliste merkt sich still, wo du in einem ungelesenen Artikel stehst, und springt beim erneuten Öffnen dorthin zurück, auch auf einem anderen Gerät oder mit anderer Schriftgröße. Es gibt dafür keine Bedienung und keine Anzeige. Der Artikel beginnt wieder oben, wenn du ihn als gelesen markierst oder bis zum Ende des Textes gescrollt hast (sobald das Textende im Fenster zu sehen ist). Gelesene Artikel starten immer oben. Ohne Verbindung wird die Stelle vorgemerkt und später übertragen.
 
+## Zurück zur Liste
+
+Im Lesemodus steht „← Zur Liste“ oben als normaler Link. Scrollst du weiter, erscheint er zusätzlich als schwebende Bubble oben links über dem Text, sodass du jederzeit zurückkommst. Am Ende des Artikels steht unten noch einmal ein normaler Link; sobald der zu sehen ist, verschwindet die Bubble.
+
 ## Installieren und offline lesen (PWA)
 
 Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“ bzw. „App installieren“) und gespeicherte Artikel auch ohne Internet lesen, zum Beispiel im Zug.
