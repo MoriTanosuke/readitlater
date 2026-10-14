@@ -73,6 +73,10 @@ Die Leseliste merkt sich still, wo du in einem ungelesenen Artikel stehst, und s
 
 Im Lesemodus steht „← Zur Liste“ oben als normaler Link. Scrollst du weiter, erscheint er zusätzlich als schwebende Bubble oben links über dem Text, sodass du jederzeit zurückkommst. Am Ende des Artikels steht unten noch einmal ein normaler Link; sobald der zu sehen ist, verschwindet die Bubble.
 
+## Bilder
+
+Beim Speichern lädt der Server die Bilder eines Artikels im Hintergrund herunter, verkleinert sie auf höchstens 1600 Pixel und zeigt im Lesemodus diese lokalen Kopien. Dadurch funktionieren auch Bilder von Servern, die das Einbinden auf fremden Seiten verhindern, und sie bleiben erhalten, wenn das Original verschwindet. Direkt nach dem Speichern stehen noch die Originale im Text, nach wenigen Sekunden beim nächsten Öffnen die lokalen Bilder. Ältere Artikel und Importe bekommen ihre Bilder über „Bilder nachladen“ im Lesemodus. Von den Originalen wird nichts aufbewahrt. Einstellbar sind `IMAGE_STORE_ENABLED` (Standard an), `IMAGE_CONCURRENCY` und `IMAGE_MAX_BYTES`. Die Bilder liegen in der Datenbank und vergrößern sie um etwa 0,2–0,5 MB je Artikel.
+
 ## Installieren und offline lesen (PWA)
 
 Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“ bzw. „App installieren“) und gespeicherte Artikel auch ohne Internet lesen, zum Beispiel im Zug.

@@ -172,6 +172,7 @@ export async function putArticle(article, { opened = false } = {}) {
     created_at: article.created_at,
     tags: article.tags ?? [],
     highlights: article.highlights ?? [],
+    images: article.images ?? {},
     opened_at: opened ? Date.now() : (previous?.opened_at ?? null),
   };
   await safely(() => transact(['articles'], 'readwrite', (a) => a.put(record)), null);
@@ -204,7 +205,7 @@ export async function list(filter = {}) {
       return words.every((w) => haystack.includes(w));
     })
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id));
-  return items.map(({ content, lang, highlights, opened_at, read_pos, ...summary }) => summary);
+  return items.map(({ content, lang, highlights, images, opened_at, read_pos, ...summary }) => summary);
 }
 
 /** Schlagwörter mit Anzahl über die gespeicherten Artikel. */
@@ -339,7 +340,7 @@ async function runSync(api) {
       const stored = await getArticle(summary.id);
       if (stored) {
         // Status, Titel und Schlagwörter können sich geändert haben; der Inhalt nicht.
-        await putArticle({ ...stored, ...summary, content: stored.content, highlights: stored.highlights });
+        await putArticle({ ...stored, ...summary, content: stored.content, highlights: stored.highlights, images: stored.images });
         continue;
       }
       try {

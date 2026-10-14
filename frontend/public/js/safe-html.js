@@ -26,6 +26,8 @@ const DROPPED_TAGS = new Set([
 
 const LINK_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 const IMAGE_PROTOCOLS = ['http:', 'https:'];
+// Lokal abgelegte Bilder liefert nur unsere eigene Schnittstelle, und zwar in genau dieser Form.
+const LOCAL_IMAGE = /^\/api\/articles\/\d+\/images\/\d+$/;
 
 /** Liefert die absolute URL, wenn das Protokoll erlaubt ist, sonst null. */
 export function safeUrl(value, baseUrl, protocols) {
@@ -39,21 +41,25 @@ export function safeUrl(value, baseUrl, protocols) {
   }
 }
 
-function copyAttributes(source, target, tag, baseUrl) {
+function copyAttributes(source, target, tag, ctx) {
   const title = source.getAttribute('title');
   if (title) target.setAttribute('title', title);
 
   if (tag === 'a') {
-    const href = safeUrl(source.getAttribute('href') ?? '', baseUrl, LINK_PROTOCOLS);
+    const href = safeUrl(source.getAttribute('href') ?? '', ctx.baseUrl, LINK_PROTOCOLS);
     if (href) {
       target.setAttribute('href', href);
       target.setAttribute('rel', 'noopener noreferrer nofollow');
       target.setAttribute('target', '_blank');
     }
   } else if (tag === 'img') {
-    const src = safeUrl(source.getAttribute('src') ?? '', baseUrl, IMAGE_PROTOCOLS);
-    if (!src) return false; // Bild ohne brauchbare Quelle weglassen
-    target.setAttribute('src', src);
+    const original = safeUrl(source.getAttribute('src') ?? '', ctx.baseUrl, IMAGE_PROTOCOLS);
+    if (!original) return false; // Bild ohne brauchbare Quelle weglassen
+    // Original-Adresse merken: Sie ist der Schlüssel für das lokale Bild (applyLocalImages).
+    target.dataset.origin = original;
+    const local = localImage(ctx.images, original);
+    target.setAttribute('src', local ? local.src : original);
+    if (local) setSize(target, local);
     target.setAttribute('alt', source.getAttribute('alt') ?? '');
     target.setAttribute('loading', 'lazy');
     target.setAttribute('decoding', 'async');
@@ -67,32 +73,70 @@ function copyAttributes(source, target, tag, baseUrl) {
   return true;
 }
 
-function convertChildren(parent, baseUrl) {
+/** Das lokale Bild zur Original-Adresse, sofern die Angabe der Schnittstelle plausibel ist. */
+function localImage(images, original) {
+  if (!images || !Object.hasOwn(images, original)) return null;
+  const entry = images[original];
+  return entry && typeof entry.src === 'string' && LOCAL_IMAGE.test(entry.src) ? entry : null;
+}
+
+/** Breite und Höhe der verkleinerten Fassung: der Browser reserviert den Platz (kein Springen). */
+function setSize(img, entry) {
+  for (const name of ['width', 'height']) {
+    const n = Number(entry[name]);
+    if (Number.isInteger(n) && n >= 1 && n <= 10000) img.setAttribute(name, String(n));
+  }
+}
+
+function convertChildren(parent, ctx) {
   const result = [];
   for (const node of parent.childNodes) {
-    const converted = convertNode(node, baseUrl);
+    const converted = convertNode(node, ctx);
     if (Array.isArray(converted)) result.push(...converted);
     else if (converted) result.push(converted);
   }
   return result;
 }
 
-function convertNode(node, baseUrl) {
+function convertNode(node, ctx) {
   if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.nodeValue);
   if (node.nodeType !== Node.ELEMENT_NODE) return null; // Kommentare usw.
 
   const tag = node.tagName.toLowerCase();
   if (DROPPED_TAGS.has(tag)) return null;
-  if (!ALLOWED_TAGS.has(tag)) return convertChildren(node, baseUrl);
+  if (!ALLOWED_TAGS.has(tag)) return convertChildren(node, ctx);
 
   const element = document.createElement(tag);
-  if (!copyAttributes(node, element, tag, baseUrl)) return null;
-  element.append(...convertChildren(node, baseUrl));
+  if (!copyAttributes(node, element, tag, ctx)) return null;
+  element.append(...convertChildren(node, ctx));
   return element;
 }
 
-/** Ersetzt den Inhalt von `container` durch die bereinigte Darstellung von `html`. */
-export function renderSafeHtml(container, html, baseUrl) {
+/**
+ * Ersetzt den Inhalt von `container` durch die bereinigte Darstellung von `html`.
+ * `images` ordnet Original-Adressen den lokal abgelegten, verkleinerten Bildern zu
+ * (`{ "https://…/a.jpg": { src, width, height } }`, siehe `GET /api/articles/{id}`).
+ */
+export function renderSafeHtml(container, html, baseUrl, images = {}) {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
-  container.replaceChildren(...convertChildren(parsed.body, baseUrl));
+  container.replaceChildren(...convertChildren(parsed.body, { baseUrl, images }));
+}
+
+/**
+ * Tauscht nachträglich Bilder, die inzwischen lokal vorliegen (der Worker war nach dem
+ * Öffnen fertig), ohne den Text neu aufzubauen. Gibt die Zahl der Bilder zurück, die noch von
+ * der Originaladresse geladen werden.
+ */
+export function applyLocalImages(container, images) {
+  let remote = 0;
+  for (const img of container.querySelectorAll('img[data-origin]')) {
+    const local = localImage(images, img.dataset.origin);
+    if (!local) {
+      remote += 1;
+      continue;
+    }
+    if (img.getAttribute('src') !== local.src) img.setAttribute('src', local.src);
+    setSize(img, local);
+  }
+  return remote;
 }

@@ -5,6 +5,8 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
 };
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 use url::Url;
@@ -16,6 +18,7 @@ use crate::{
     extract::{self, ExtractError},
     fetch::FetchError,
     highlights::{self, Highlight},
+    images::{self, ImageRef},
     tags,
 };
 
@@ -89,6 +92,9 @@ pub struct ArticleFull {
     /// Markierungen und Notizen, damit der Lesemodus (und der Offline-Speicher) mit einer
     /// Anfrage auskommt.
     highlights: Vec<Highlight>,
+    /// Lokal abgelegte, verkleinerte Bilder: Schlüssel ist die Original-Adresse im Inhalt.
+    /// Das Frontend tauscht beim Anzeigen die Adresse; fehlende Bilder bleiben Original-Links.
+    images: BTreeMap<String, ImageRef>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -146,6 +152,7 @@ impl From<FullRow> for ArticleFull {
             created_at: row.created_at,
             tags: parse_tags(&row.tags),
             highlights: Vec::new(),
+            images: BTreeMap::new(),
         }
     }
 }
@@ -221,7 +228,15 @@ pub async fn save_article(
     .await;
 
     match inserted {
-        Ok(row) => Ok(row.into()),
+        Ok(row) => {
+            // Bilder im Hintergrund holen; der Artikel ist auch ohne sie vollständig.
+            if state.config.image_store_enabled
+                && let Err(e) = images::enqueue(state, row.id, &extracted.content_html, &url).await
+            {
+                tracing::warn!("Bilder von Artikel {} nicht eingereiht: {e}", row.id);
+            }
+            Ok(row.into())
+        }
         // Zwei gleichzeitige Anfragen für dieselbe Adresse.
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(already_saved()),
         Err(e) => Err(e.into()),
@@ -352,6 +367,7 @@ pub async fn show(
     };
     let mut full = ArticleFull::from(row);
     full.highlights = highlights::for_article(&state.pool, user.id, id).await?;
+    full.images = images::for_article(&state.pool, id).await?;
     Ok(Json(full))
 }
 

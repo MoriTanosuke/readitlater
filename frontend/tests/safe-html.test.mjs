@@ -14,17 +14,18 @@ globalThis.document = dom.window.document;
 globalThis.Node = dom.window.Node;
 globalThis.DOMParser = dom.window.DOMParser;
 
-const { renderSafeHtml, safeUrl } = await import(
+const { applyLocalImages, renderSafeHtml, safeUrl } = await import(
   pathToFileURL(path.join(PUBLIC, 'js/safe-html.js')).href
 );
 
 const ALLOWED_ATTRS = new Set([
   'title', 'href', 'rel', 'target', 'src', 'alt', 'loading', 'decoding', 'referrerpolicy', 'colspan', 'rowspan',
+  'data-origin', 'width', 'height',
 ]);
 
-function render(html, base = 'https://news.example/artikel/1') {
+function render(html, base = 'https://news.example/artikel/1', images = {}) {
   const container = document.getElementById('c');
-  renderSafeHtml(container, html, base);
+  renderSafeHtml(container, html, base, images);
   for (const el of container.querySelectorAll('*')) {
     for (const attr of el.attributes) {
       assert.ok(ALLOWED_ATTRS.has(attr.name), `unerlaubtes Attribut ${attr.name} an <${el.tagName}>`);
@@ -129,4 +130,66 @@ test('leere Eingabe und safeUrl', () => {
   assert.equal(render('').innerHTML, '');
   assert.equal(safeUrl('x', 'not a url', ['https:']), null);
   assert.equal(safeUrl('https://a.example/', 'https://b.example/', ['https:']), 'https://a.example/');
+});
+
+test('lokale Bilder ersetzen die Adresse und setzen die Maße, fehlende bleiben Original', () => {
+  const images = {
+    'https://img.example/a.png': { src: '/api/articles/7/images/3', width: 800, height: 600 },
+  };
+  const c = render(
+    '<img src="https://img.example/a.png" alt="a"><img src="https://img.example/b.png" alt="b">' +
+      '<img src="/rel.png" alt="c">',
+    'https://news.example/artikel/1',
+    images,
+  );
+  const [a, b, rel] = c.querySelectorAll('img');
+  assert.equal(a.getAttribute('src'), '/api/articles/7/images/3');
+  assert.equal(a.getAttribute('width'), '800');
+  assert.equal(a.getAttribute('height'), '600');
+  assert.equal(a.dataset.origin, 'https://img.example/a.png');
+  assert.equal(b.getAttribute('src'), 'https://img.example/b.png');
+  assert.equal(b.getAttribute('width'), null);
+  assert.equal(rel.getAttribute('src'), 'https://news.example/rel.png');
+  assert.equal(a.getAttribute('referrerpolicy'), 'no-referrer');
+});
+
+test('Angaben zu lokalen Bildern werden geprüft: nur eigene Bild-Adressen, vernünftige Maße', () => {
+  const images = {
+    'https://img.example/a.png': { src: 'https://evil.example/x.png', width: 10, height: 10 },
+    'https://img.example/b.png': { src: '/api/articles/1/images/2/../../me', width: 10, height: 10 },
+    'https://img.example/c.png': { src: '/api/articles/1/images/2', width: -5, height: 'riesig' },
+    'https://img.example/d.png': { src: 'javascript:alert(1)' },
+  };
+  const c = render(
+    ['a', 'b', 'c', 'd'].map((n) => `<img src="https://img.example/${n}.png">`).join(''),
+    'https://news.example/',
+    images,
+  );
+  const [a, b, cc, d] = c.querySelectorAll('img');
+  assert.equal(a.getAttribute('src'), 'https://img.example/a.png');
+  assert.equal(b.getAttribute('src'), 'https://img.example/b.png');
+  assert.equal(cc.getAttribute('src'), '/api/articles/1/images/2');
+  assert.equal(cc.getAttribute('width'), null, 'unsinnige Maße werden nicht übernommen');
+  assert.equal(cc.getAttribute('height'), null);
+  assert.equal(d.getAttribute('src'), 'https://img.example/d.png');
+  // Schlüssel wie „__proto__“ oder „constructor“ dürfen nichts ausrichten.
+  const c2 = render('<img src="https://img.example/x.png">', 'https://news.example/', JSON.parse('{"__proto__": {"src": "/api/articles/1/images/1"}}'));
+  assert.equal(c2.querySelector('img').getAttribute('src'), 'https://img.example/x.png');
+});
+
+test('applyLocalImages tauscht nachträglich und zählt die übrigen Original-Bilder', () => {
+  const c = render('<img src="https://img.example/a.png"><img src="https://img.example/b.png">');
+  assert.equal(applyLocalImages(c, {}), 2);
+  const remote = applyLocalImages(c, {
+    'https://img.example/a.png': { src: '/api/articles/7/images/3', width: 40, height: 30 },
+  });
+  assert.equal(remote, 1);
+  const [a, b] = c.querySelectorAll('img');
+  assert.equal(a.getAttribute('src'), '/api/articles/7/images/3');
+  assert.equal(a.getAttribute('width'), '40');
+  assert.equal(b.getAttribute('src'), 'https://img.example/b.png');
+  assert.equal(applyLocalImages(c, {
+    'https://img.example/a.png': { src: '/api/articles/7/images/3', width: 40, height: 30 },
+    'https://img.example/b.png': { src: '/api/articles/7/images/4', width: 40, height: 30 },
+  }), 0);
 });

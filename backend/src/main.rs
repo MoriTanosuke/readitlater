@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use readlater_backend::{AppState, app, auth, config::Config, db};
+use readlater_backend::{AppState, app, auth, config::Config, db, images};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -64,6 +64,11 @@ async fn main() {
             auth::purge_expired_sessions(&purge_state).await;
         }
     });
+
+    // Bilder der Artikel im Hintergrund holen und verkleinern (Warteschlange in der Datenbank).
+    if state.config.image_store_enabled {
+        tokio::spawn(images::run_worker(state.clone()));
+    }
 
     let listener = match TcpListener::bind(&state.config.bind_addr).await {
         Ok(listener) => listener,
