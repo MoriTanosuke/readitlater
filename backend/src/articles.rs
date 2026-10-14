@@ -72,6 +72,9 @@ pub struct ArticleSummary {
     is_read: bool,
     created_at: String,
     tags: Vec<String>,
+    /// Zahl der lokal abgelegten Bilder. Der Offline-Abgleich vergleicht sie mit seiner Kopie
+    /// und lädt den Artikel nur dann neu, wenn inzwischen Bilder fertig geworden sind.
+    image_count: i64,
 }
 
 /// Einzelner Artikel mit bereinigtem HTML-Inhalt.
@@ -107,6 +110,7 @@ struct SummaryRow {
     is_read: bool,
     created_at: String,
     tags: String,
+    image_count: i64,
 }
 
 impl From<SummaryRow> for ArticleSummary {
@@ -120,6 +124,7 @@ impl From<SummaryRow> for ArticleSummary {
             is_read: row.is_read,
             created_at: row.created_at,
             tags: parse_tags(&row.tags),
+            image_count: row.image_count,
         }
     }
 }
@@ -215,7 +220,7 @@ pub async fn save_article(
     let inserted = sqlx::query_as::<_, SummaryRow>(
         "INSERT INTO articles (user_id, url, title, content, content_text, excerpt, lang) \
          VALUES (?, ?, ?, ?, ?, ?, ?) \
-         RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags",
+         RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags, 0 AS image_count",
     )
     .bind(user_id)
     .bind(&normalized)
@@ -268,7 +273,8 @@ pub async fn list(
                         a.is_read, a.created_at, \
                         (SELECT json_group_array(name) FROM ( \
                             SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
-                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags, \
+                        (SELECT COUNT(*) FROM article_images WHERE article_id = a.id AND status = 'done') AS image_count \
                  FROM articles_fts \
                  JOIN articles a ON a.id = articles_fts.rowid \
                  WHERE articles_fts MATCH ?1 AND a.user_id = ?2 \
@@ -293,7 +299,8 @@ pub async fn list(
                         a.is_read, a.created_at, \
                         (SELECT json_group_array(name) FROM ( \
                             SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
-                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                            WHERE at.article_id = a.id ORDER BY t.name)) AS tags, \
+                        (SELECT COUNT(*) FROM article_images WHERE article_id = a.id AND status = 'done') AS image_count \
                  FROM articles a \
                  WHERE a.user_id = ?1 \
                    AND (?2 IS NULL OR a.is_read = ?2) \
@@ -431,7 +438,8 @@ async fn load_summary(
         "SELECT a.id, a.url, a.title, a.excerpt, NULL AS snippet, a.is_read, a.created_at, \
                 (SELECT json_group_array(name) FROM ( \
                     SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id \
-                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags \
+                    WHERE at.article_id = a.id ORDER BY t.name)) AS tags, \
+                (SELECT COUNT(*) FROM article_images WHERE article_id = a.id AND status = 'done') AS image_count \
          FROM articles a WHERE a.id = ? AND a.user_id = ?",
     )
     .bind(id)
