@@ -872,7 +872,7 @@ async function openReader(id) {
     const article = await api.getArticle(id);
     if (token !== routeToken) return;
     setOfflineBanner(false);
-    offline.putArticle(article, { opened: true });
+    offline.putArticle(article, { opened: true }).then(() => offline.cacheImages(article));
     if (!stored || stored.content !== article.content) {
       clearReaderView();
       renderArticle(article);
@@ -971,7 +971,7 @@ $('reader-refresh-images').addEventListener('click', async () => {
       const article = await api.getArticle(id);
       if (token !== routeToken) return;
       readerArticle = { ...readerArticle, images: article.images };
-      offline.putArticle(article, { opened: true });
+      offline.putArticle(article, { opened: true }).then(() => offline.cacheImages(article));
       remote = updateImageRefresh(article);
     }
     $('reader-notice').textContent =

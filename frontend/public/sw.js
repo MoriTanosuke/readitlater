@@ -3,12 +3,19 @@
 // im Cache dieses Workers (die gespeicherten Artikel verwaltet js/offline.js, nur für den
 // angemeldeten Benutzer und mit Löschen beim Abmelden).
 //
+// Eine einzige Ausnahme gilt für die lokal abgelegten Artikelbilder (`/api/articles/{id}/images/{id}`):
+// Sie liegen im Cache `leseliste-images`, den allein js/offline.js befüllt und beim Abmelden
+// leert. Der Worker liest ihn nur (zuerst der Cache, sonst das Netz) und speichert nie selbst
+// etwas. So sind die Bilder gespeicherter Artikel auch ohne Internet da.
+//
 // Strategie „Netz zuerst mit Zeitlimit“: Antwortet der Server innerhalb von vier Sekunden, gilt
 // die frische Datei (und wird im Cache aufgefrischt). Sonst, etwa im Zug bei schlechtem Empfang
 // oder ohne Netz, kommt die zuletzt gespeicherte Datei. So passen HTML und Skripte zusammen,
 // ohne dass bei Änderungen eine Versionsnummer gepflegt werden muss.
 
 const CACHE = 'leseliste-shell-v1';
+const IMAGE_CACHE = 'leseliste-images'; // gleicher Name wie in js/offline.js
+const IMAGE_PATH = /^\/api\/articles\/\d+\/images\/\d+$/;
 const TIMEOUT_MS = 4000;
 
 // Wird beim Installieren vollständig geladen. Alles, was die Seite später nachlädt, kommt
@@ -42,7 +49,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE && key !== IMAGE_CACHE).map((key) => caches.delete(key))),
+      )
       .then(() => self.clients.claim()),
   );
 });
@@ -52,9 +61,25 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (IMAGE_PATH.test(url.pathname)) {
+    event.respondWith(cachedImage(request, url));
+    return;
+  }
   if (url.pathname.startsWith('/api/')) return; // nie die Schnittstelle zwischenspeichern
   event.respondWith(networkFirst(event, request, url));
 });
+
+/** Artikelbild: der gespeicherte Stand, sonst das Netz. Schreibt nie in den Cache. */
+async function cachedImage(request, url) {
+  try {
+    const cache = await caches.open(IMAGE_CACHE);
+    const hit = await cache.match(url.pathname);
+    if (hit) return hit;
+  } catch {
+    // Cache nicht lesbar: wie ohne Worker weiter zum Netz
+  }
+  return fetch(request);
+}
 
 /** Alle Seitenaufrufe teilen sich einen Eintrag („/“), auch mit Suchparametern (Teilen). */
 function cacheKey(request, url) {

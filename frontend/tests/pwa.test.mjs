@@ -45,9 +45,10 @@ test('index.html bindet Manifest, Icons und Farbe ein', () => {
 });
 
 /** Lädt sw.js in eine vm mit nachgebauten Browser-Schnittstellen. */
-function loadWorker({ fetchImpl, cached = new Map() } = {}) {
+function loadWorker({ fetchImpl, cached = new Map(), cacheKeys = [] } = {}) {
   const handlers = {};
   const puts = [];
+  const deleted = [];
   const cache = {
     async addAll() {},
     async put(key, response) { puts.push(key); cached.set(key, response); },
@@ -60,7 +61,11 @@ function loadWorker({ fetchImpl, cached = new Map() } = {}) {
       skipWaiting: async () => {},
       clients: { claim: async () => {} },
     },
-    caches: { open: async () => cache, keys: async () => [], delete: async () => true },
+    caches: {
+      open: async () => cache,
+      keys: async () => cacheKeys,
+      delete: async (name) => { deleted.push(name); return true; },
+    },
     fetch: fetchImpl ?? (async () => ({ ok: true, type: 'basic', clone() { return this; } })),
     URL,
     Promise,
@@ -79,7 +84,12 @@ function loadWorker({ fetchImpl, cached = new Map() } = {}) {
     const response = responded ? await responded : undefined;
     return { intercepted: responded !== undefined, response };
   };
-  return { run, puts, cached };
+  const activate = async () => {
+    let waited;
+    handlers.activate({ waitUntil: (promise) => { waited = promise; } });
+    await waited;
+  };
+  return { run, puts, cached, deleted, activate };
 }
 
 const get = (pathname, extra = {}) => ({
@@ -100,6 +110,57 @@ test('Service Worker fasst die Schnittstelle, fremde Adressen und Schreibzugriff
     assert.equal((await worker.run(request)).intercepted, false, `${request.method} ${request.url}`);
   }
   assert.deepEqual(worker.puts, [], 'nichts davon landet im Cache');
+});
+
+test('Service Worker liefert gespeicherte Artikelbilder zuerst aus dem Cache und schreibt nie hinein', async () => {
+  const image = '/api/articles/7/images/3';
+  const stored = { tag: 'gespeichert' };
+  let worker = loadWorker({
+    fetchImpl: async () => { throw new TypeError('offline'); },
+    cached: new Map([[image, stored]]),
+  });
+  let result = await worker.run(get(image, { mode: 'no-cors' }));
+  assert.equal(result.intercepted, true);
+  assert.equal(result.response, stored, 'ohne Netz kommt das gespeicherte Bild');
+
+  // Mit Netz gewinnt trotzdem der Cache (Bilder ändern sich nie), das Netz wird nicht gefragt.
+  let calls = 0;
+  worker = loadWorker({
+    fetchImpl: async () => { calls += 1; return { ok: true, type: 'basic', clone() { return this; } }; },
+    cached: new Map([[image, stored]]),
+  });
+  assert.equal((await worker.run(get(image))).response, stored);
+  assert.equal(calls, 0);
+
+  // Nicht gespeichert: Netz, und der Worker legt nichts ab (das tut allein offline.js).
+  const fresh = { ok: true, type: 'basic', tag: 'frisch', clone() { return this; } };
+  worker = loadWorker({ fetchImpl: async () => fresh });
+  result = await worker.run(get(image));
+  assert.equal(result.response, fresh);
+  assert.deepEqual(worker.puts, []);
+
+  // Nur genau diese Adressen: alles andere unter /api bleibt unberührt.
+  worker = loadWorker({ cached: new Map([['/api/articles/7/images/3/x', stored]]) });
+  for (const other of [
+    '/api/articles/7/images/3/x', '/api/articles/7/images/', '/api/articles/7/images/abc',
+    '/api/articles/abc/images/3', '/api/articles/7/highlights', '/api/articles/7',
+    '/api/articles/7/refresh-images', '/x/api/articles/7/images/3',
+  ]) {
+    const request = get(other);
+    const { intercepted } = await worker.run(request);
+    // Die letzte Adresse liegt nicht unter /api und gehört der normalen Dateistrategie.
+    assert.equal(intercepted, other.startsWith('/x/'), other);
+  }
+
+  // Nicht-GET-Anfragen auf die Bildadresse fasst er nie an.
+  worker = loadWorker({ cached: new Map([[image, stored]]) });
+  assert.equal((await worker.run({ method: 'DELETE', url: `https://leseliste.example${image}`, mode: 'cors' })).intercepted, false);
+});
+
+test('Beim Aktivieren bleibt der Bilder-Cache erhalten, alte Caches werden gelöscht', async () => {
+  const worker = loadWorker({ cacheKeys: ['leseliste-shell-v0', 'leseliste-shell-v1', 'leseliste-images'] });
+  await worker.activate();
+  assert.deepEqual(worker.deleted, ['leseliste-shell-v0']);
 });
 
 test('Service Worker: Netz zuerst, bei Fehler oder Zeitlimit die gespeicherte Datei', async () => {
