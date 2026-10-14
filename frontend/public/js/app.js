@@ -1,4 +1,5 @@
 import { api, ApiError } from './api.js';
+import { createBackBubble } from './backlink.js';
 import { createHighlighter } from './highlights.js';
 import * as offline from './offline.js';
 import { createPositionTracker } from './position.js';
@@ -30,6 +31,13 @@ let pendingShare = takeSharedUrl(); // Adresse, die per „Teilen“ an die App 
 
 const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthError(error) });
 const position = createPositionTracker({ root: $('reader-content'), save: saveReadingPosition });
+const backBubble = createBackBubble({
+  bubble: $('reader-back-float'),
+  top: $('reader-back'),
+  bottom: $('reader-back-bottom'),
+  content: $('reader-content'),
+  isActive: () => !$('view-reader').hidden,
+});
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
@@ -40,6 +48,7 @@ function show(view) {
   if (view !== 'reader') highlighter.reset();
   if (view !== 'reader') setReadingPanel(false);
   for (const name of VIEWS) $(`view-${name}`).hidden = name !== view;
+  backBubble.reset(); // nach dem Umschalten: blendet aus und misst im Lesemodus neu
 }
 
 function showError(element, message) {
@@ -815,6 +824,7 @@ function renderArticle(article) {
   $('form-tags').hidden = false;
   highlighter.open(article.id, article.highlights);
   position.begin(article); // springt zur gemerkten Stelle und merkt sich die weiteren
+  backBubble.schedule(); // der Text ist da: Seitenende und Link unten haben sich verschoben
 }
 
 /**

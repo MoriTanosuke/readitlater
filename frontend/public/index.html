@@ -258,6 +258,8 @@
     </section>
 
     <section id="view-reader" hidden>
+      <!-- Schwebende Fassung des Links oben: erscheint erst, wenn der Link oben aus dem Bild gescrollt ist (js/backlink.js). -->
+      <a href="#/" id="reader-back-float" class="back-bubble" hidden>← Zur Liste</a>
       <div class="reading-scope">
       <nav class="reader-nav">
         <a href="#/" id="reader-back">← Zur Liste</a>
@@ -286,6 +288,9 @@
           <aside id="reader-notes" class="notes" aria-label="Notizen" hidden></aside>
         </div>
       </article>
+      <div class="reader-nav reader-nav-bottom">
+        <a href="#/" id="reader-back-bottom">← Zur Liste</a>
+      </div>
       </div>
       <div id="hl-panel" class="hl-panel" role="group" aria-label="Markierung" hidden>
         <button type="button" id="hl-close" class="hl-close" aria-label="Schließen">✕</button>

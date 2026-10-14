@@ -213,6 +213,34 @@ a { color: var(--accent); }
 /* Lesemodus */
 .reader-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 1rem; min-height: 2.75rem; }
 .reader-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; white-space: nowrap; }
+.reader-nav-bottom { margin: 2rem 0 0; }
+
+/* Schwebender „Zur Liste“-Link: erscheint, sobald der Link oben aus dem Bild gescrollt ist, und
+   verschwindet am Seitenende, wo ein normaler Link steht. Liegt außerhalb der Lesespalte und
+   behält deshalb die Oberflächenschrift. */
+.back-bubble {
+  position: fixed;
+  top: calc(0.75rem + env(safe-area-inset-top));
+  left: calc(0.75rem + env(safe-area-inset-left));
+  z-index: 15; /* über dem Text, unter dem Panel der Markierungen (20) */
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+  animation: back-bubble-in 0.15s ease-out;
+}
+.back-bubble:hover { text-decoration: underline; }
+@keyframes back-bubble-in { from { opacity: 0; transform: translateY(-0.5rem); } }
+@media (prefers-reduced-motion: reduce) { .back-bubble { animation: none; } }
+
 #reader-title { overflow-wrap: anywhere; line-height: 1.25; font-size: 1.5em; }
 #reader-meta { margin-top: -0.5rem; font-size: 0.875rem; }
 
