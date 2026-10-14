@@ -26,6 +26,12 @@ pub struct Config {
     pub fetch_max_bytes: usize,
     /// Maximal gleichzeitige Seitenabrufe (`FETCH_CONCURRENCY`).
     pub fetch_concurrency: usize,
+    /// Bilder der Artikel lokal ablegen und verkleinern (`IMAGE_STORE_ENABLED`, Standard: an).
+    pub image_store_enabled: bool,
+    /// Gleichzeitig bearbeitete Bilder im Hintergrund (`IMAGE_CONCURRENCY`).
+    pub image_concurrency: usize,
+    /// Maximale Größe eines heruntergeladenen Bildes in Bytes (`IMAGE_MAX_BYTES`).
+    pub image_max_bytes: usize,
     /// Ratenbegrenzung (`RATE_LIMIT_ENABLED`, Standard: an). Die Werte der einzelnen
     /// Stufen stehen in `ratelimit.rs`.
     pub rate_limits: RateLimitConfig,
@@ -43,6 +49,9 @@ impl Default for Config {
             fetch_timeout_secs: 15,
             fetch_max_bytes: 2 * 1024 * 1024,
             fetch_concurrency: 4,
+            image_store_enabled: true,
+            image_concurrency: 2,
+            image_max_bytes: 10 * 1024 * 1024,
             rate_limits: RateLimitConfig::default(),
         }
     }
@@ -61,6 +70,9 @@ impl Config {
             fetch_timeout_secs: env_positive("FETCH_TIMEOUT_SECS", defaults.fetch_timeout_secs),
             fetch_max_bytes: env_positive("FETCH_MAX_BYTES", defaults.fetch_max_bytes),
             fetch_concurrency: env_positive("FETCH_CONCURRENCY", defaults.fetch_concurrency),
+            image_store_enabled: env_bool("IMAGE_STORE_ENABLED", defaults.image_store_enabled),
+            image_concurrency: env_positive("IMAGE_CONCURRENCY", defaults.image_concurrency),
+            image_max_bytes: env_positive("IMAGE_MAX_BYTES", defaults.image_max_bytes),
             rate_limits: RateLimitConfig {
                 enabled: env_bool("RATE_LIMIT_ENABLED", defaults.rate_limits.enabled),
                 ..defaults.rate_limits

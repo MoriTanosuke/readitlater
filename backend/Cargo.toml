@@ -14,6 +14,7 @@ futures-util = { version = "0.3.34", default-features = false, features = ["std"
 getrandom = "0.4"
 governor = { version = "0.10.4", default-features = false, features = ["std", "dashmap", "quanta"] }
 hex = "0.4"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 mime_guess = "2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "charset", "gzip", "brotli"] }
 rust-embed = "8"
@@ -46,3 +47,17 @@ opt-level = 3
 strip = true
 # Kein LTO: Das Linken mit LTO dominierte den Build des eigenen Codes im Docker-Image
 # (gemessen 68 s gegen 18 s bei gleich großem Binary). Siehe CLAUDE.md.
+
+# Bildverarbeitung ist im Debug-Build ohne Optimierung sehr langsam (Tests, lokales Arbeiten).
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.image-webp]
+opt-level = 3

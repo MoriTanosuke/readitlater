@@ -272,6 +272,44 @@ pub fn sanitize(html: &str) -> String {
         .to_string()
 }
 
+/// Adressen der Bilder (`<img src>`) im bereinigten HTML, absolut gegen `base` aufgelöst, nur
+/// http(s), ohne Doppelte, in Reihenfolge des Auftretens und höchstens `max`. Die Adressen
+/// stimmen mit denen überein, die das Frontend beim Anzeigen bildet (`new URL(src, base).href`).
+pub fn image_urls(html: &str, base: &Url, max: usize) -> Vec<Url> {
+    let found = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let sink = found.clone();
+    // Der Filter sieht jedes erlaubte Attribut; er sammelt nur `src` von `img` und ändert nichts.
+    let _ = ammonia::Builder::default()
+        .attribute_filter(move |element, attribute, value| {
+            if element == "img"
+                && attribute == "src"
+                && let Ok(mut list) = sink.lock()
+            {
+                list.push(value.to_owned());
+            }
+            Some(value.into())
+        })
+        .clean(html);
+    let raw = found.lock().map(|list| list.clone()).unwrap_or_default();
+
+    let mut urls: Vec<Url> = Vec::new();
+    for value in raw {
+        if urls.len() >= max {
+            break;
+        }
+        let Ok(url) = base.join(value.trim()) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
+        if !urls.contains(&url) {
+            urls.push(url);
+        }
+    }
+    urls
+}
+
 fn collapse_whitespace(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -288,6 +326,27 @@ fn truncate_chars(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_urls_are_absolute_unique_and_limited() {
+        let base = Url::parse("https://example.org/a/b.html").unwrap();
+        let html = "<p><img src=\"/x.png\"><img src=\"y.jpg\"><img src=\"https://cdn.example.net/z.gif\">\
+                    <img src=\"/x.png\"><img src=\"data:image/png;base64,AAAA\"><img src=\"javascript:alert(1)\">\
+                    <img alt=\"ohne\"><a href=\"/nicht-bild.png\">Link</a></p>";
+        let urls: Vec<String> = image_urls(html, &base, 10)
+            .iter()
+            .map(Url::to_string)
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                "https://example.org/x.png",
+                "https://example.org/a/y.jpg",
+                "https://cdn.example.net/z.gif"
+            ]
+        );
+        assert_eq!(image_urls(html, &base, 2).len(), 2);
+    }
 
     fn page(title: &str, body: &str) -> String {
         format!(

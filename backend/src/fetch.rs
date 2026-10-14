@@ -173,6 +173,53 @@ impl Fetcher {
     }
 }
 
+impl Fetcher {
+    /// Lädt ein Bild (gleicher SSRF-Schutz wie bei Seiten). Als Referer geht die Adresse des
+    /// Artikels mit: Viele Server lassen Bilder nur für die eigene Seite zu. Ob es wirklich ein
+    /// Bild ist, entscheidet nicht der Content-Type des fremden Servers, sondern die Prüfung der
+    /// Bytes in `imageproc`. Das Limit gilt für die entpackten Daten.
+    pub async fn fetch_image(
+        &self,
+        url: &Url,
+        referer: &Url,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, FetchError> {
+        self.validate(url)?;
+
+        let mut response = self
+            .client
+            .get(url.clone())
+            .header(
+                header::ACCEPT,
+                "image/jpeg,image/png,image/webp,image/gif;q=0.9",
+            )
+            .header(header::REFERER, referer.as_str())
+            .send()
+            .await
+            .map_err(classify)?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(FetchError::Status(status));
+        }
+        if response
+            .content_length()
+            .is_some_and(|len| len > max_bytes as u64)
+        {
+            return Err(FetchError::TooLarge);
+        }
+
+        let mut body: Vec<u8> = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(classify)? {
+            if body.len() + chunk.len() > max_bytes {
+                return Err(FetchError::TooLarge);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(body)
+    }
+}
+
 /// Ordnet einen reqwest-Fehler ein und sucht dabei nach unseren Schutz-Fehlern.
 fn classify(err: reqwest::Error) -> FetchError {
     let mut source: Option<&(dyn Error + 'static)> = Some(&err);

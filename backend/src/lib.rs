@@ -8,6 +8,8 @@ pub mod error;
 pub mod extract;
 pub mod fetch;
 pub mod highlights;
+pub mod imageproc;
+pub mod images;
 pub mod ratelimit;
 pub mod share;
 pub mod static_files;
@@ -25,7 +27,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use sqlx::SqlitePool;
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 
 use crate::{config::Config, error::ApiError, fetch::Fetcher};
 
@@ -41,6 +43,8 @@ pub struct AppState {
     pub import_slot: Arc<Semaphore>,
     /// Ratenbegrenzung (nur im Speicher).
     pub limits: Arc<ratelimit::Limits>,
+    /// Weckt den Bilder-Worker (`images::run_worker`), wenn neue Aufträge da sind.
+    pub image_wakeup: Arc<Notify>,
 }
 
 impl AppState {
@@ -56,6 +60,7 @@ impl AppState {
             fetch_slots: Arc::new(Semaphore::new(config.fetch_concurrency)),
             import_slot: Arc::new(Semaphore::new(1)),
             limits: Arc::new(ratelimit::Limits::new(config.rate_limits)),
+            image_wakeup: Arc::new(Notify::new()),
             config: Arc::new(config),
         })
     }
@@ -86,6 +91,8 @@ pub fn app(state: AppState) -> Router {
                 .patch(articles::update)
                 .delete(articles::remove),
         )
+        .route("/articles/{id}/images/{image_id}", get(images::show))
+        .route("/articles/{id}/refresh-images", post(images::refresh))
         .route(
             "/articles/{id}/highlights",
             get(highlights::list).post(highlights::create),
