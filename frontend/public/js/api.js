@@ -66,6 +66,21 @@ export const api = {
       new_password: newPassword,
     }),
   deleteAccount: (password) => request('DELETE', '/account', { password }),
+  /** Was der Server kann: { passkeys: bool } (ohne Anmeldung abrufbar). */
+  features: () => request('GET', '/features'),
+  listPasskeys: () => request('GET', '/passkeys'),
+  /** Prüft das Passwort und liefert die Optionen für navigator.credentials.create(). */
+  startPasskeyRegistration: (name, password) =>
+    request('POST', '/passkeys/register/start', { name, password }),
+  finishPasskeyRegistration: (credential) =>
+    request('POST', '/passkeys/register/finish', { credential }),
+  renamePasskey: (id, name) => request('PATCH', `/passkeys/${encodeURIComponent(id)}`, { name }),
+  deletePasskey: (id, password) =>
+    request('DELETE', `/passkeys/${encodeURIComponent(id)}`, { password }),
+  /** Liefert { id, options } für navigator.credentials.get(), ohne vorgegebenes Konto. */
+  startPasskeyLogin: () => request('POST', '/passkeys/login/start', {}),
+  finishPasskeyLogin: (id, credential) =>
+    request('POST', '/passkeys/login/finish', { id, credential }),
   /** file: ausgewählte Exportdatei, der Browser sendet sie direkt. */
   importArticles: (file) => request('POST', '/import', file, true, 300_000),
   listShareTokens: () => request('GET', '/share-tokens'),

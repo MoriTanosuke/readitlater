@@ -2,13 +2,14 @@ import { api, ApiError } from './api.js';
 import { createBackBubble } from './backlink.js';
 import { createHighlighter } from './highlights.js';
 import * as offline from './offline.js';
+import { createPasskey, getPasskey, PasskeyError, passkeysSupported } from './passkeys.js';
 import { createPositionTracker } from './position.js';
 import { mountControls } from './reading.js';
 import { applyLocalImages, renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
 const READ_FILTER_KEY = 'leseliste-read-filter';
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'delete', 'share', 'data', 'offline', 'display'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'passkeys', 'delete', 'share', 'data', 'offline', 'display'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 const SLOW_MS = 2500; // so lange wartet die Liste auf den Server, bevor gespeicherte Artikel erscheinen
@@ -28,6 +29,7 @@ let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
 let offlineView = false; // zeigt die App gerade gespeicherte statt aktuelle Daten?
 let lastSync = 0; // Zeitpunkt (ms) des letzten Abgleichs mit dem Server
+let serverPasskeys = false; // hat der Server Passkeys eingerichtet?
 let pendingShare = takeSharedUrl(); // Adresse, die per „Teilen“ an die App gesendet wurde
 
 const highlighter = createHighlighter({ api, onAuthError: (error) => handleAuthError(error) });
@@ -179,6 +181,7 @@ function endSession() {
   resetHash();
   setMode('login');
   show('auth');
+  loadFeatures();
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +197,23 @@ function setMode(next) {
   $('auth-hint').hidden = isLogin;
   $('form-auth').elements.password.autocomplete = isLogin ? 'current-password' : 'new-password';
   clearError($('auth-error'));
+  updatePasskeyLogin();
+}
+
+/** Der Knopf „Mit Passkey anmelden“ erscheint nur, wenn Server und Browser Passkeys können. */
+function updatePasskeyLogin() {
+  $('passkey-login').hidden = !(mode === 'login' && serverPasskeys && passkeysSupported());
+}
+
+/** Fragt den Server, ob Passkeys eingerichtet sind (Fehler: dann bleiben sie aus). */
+async function loadFeatures() {
+  try {
+    const features = await api.features();
+    serverPasskeys = features?.passkeys === true;
+  } catch {
+    serverPasskeys = false;
+  }
+  updatePasskeyLogin();
 }
 
 $('tab-login').addEventListener('click', () => setMode('login'));
@@ -210,14 +230,35 @@ $('form-auth').addEventListener('submit', async (event) => {
       mode === 'login' ? api.login(email, password) : api.register(email, password),
     );
     form.reset();
-    await offline.adopt(user); // Daten eines anderen Benutzers werden hier verworfen
-    currentUser = user;
-    articles = [];
-    listLoaded = false;
-    tagsStale = true;
-    resetHash();
-    route();
-    savePendingShare();
+    await completeLogin(user);
+  } catch (error) {
+    showError($('auth-error'), error.message);
+  }
+});
+
+/** Nach erfolgreicher Anmeldung (Passwort, Registrierung oder Passkey) in die App wechseln. */
+async function completeLogin(user) {
+  await offline.adopt(user); // Daten eines anderen Benutzers werden hier verworfen
+  currentUser = user;
+  articles = [];
+  listLoaded = false;
+  tagsStale = true;
+  resetHash();
+  route();
+  savePendingShare();
+}
+
+// Anmeldung ohne E-Mail: Der Passkey im Gerät nennt das Konto selbst.
+$('btn-passkey-login').addEventListener('click', async () => {
+  clearError($('auth-error'));
+  try {
+    const user = await withBusy($('btn-passkey-login'), async () => {
+      const { id, options } = await api.startPasskeyLogin();
+      const credential = await getPasskey(options);
+      return api.finishPasskeyLogin(id, credential);
+    });
+    $('form-auth').reset();
+    await completeLogin(user);
   } catch (error) {
     showError($('auth-error'), error.message);
   }
@@ -413,6 +454,128 @@ $('share-copy').addEventListener('click', async () => {
   }
 });
 
+// Passkeys (#/account/passkeys)
+
+function renderPasskeys(list) {
+  const ul = $('passkeys-list');
+  ul.replaceChildren();
+  $('passkeys-empty').hidden = list.length > 0;
+  for (const item of list) {
+    const li = element('li', 'token-item');
+    const info = element('div', 'token-info');
+    info.append(element('strong', '', item.name));
+    const used = item.last_used_at
+      ? `zuletzt benutzt am ${formatDate(item.last_used_at)}`
+      : 'noch nicht benutzt';
+    info.append(element('span', 'hint', `angelegt am ${formatDate(item.created_at)}, ${used}`));
+
+    const rename = element('button', '', 'Umbenennen');
+    rename.type = 'button';
+    rename.setAttribute('aria-label', `Passkey ${item.name} umbenennen`);
+    rename.addEventListener('click', async () => {
+      const name = window.prompt('Neuer Name für diesen Passkey', item.name);
+      if (name === null || name.trim() === '' || name.trim() === item.name) return;
+      clearError($('passkeys-error'));
+      try {
+        await withBusy(rename, () => api.renamePasskey(item.id, name));
+        await loadPasskeys();
+      } catch (error) {
+        if (!handleAuthError(error)) showError($('passkeys-error'), error.message);
+      }
+    });
+
+    const remove = element('button', 'danger-btn', 'Löschen');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Passkey ${item.name} löschen`);
+    remove.addEventListener('click', async () => {
+      clearError($('passkeys-error'));
+      $('passkeys-notice').hidden = true;
+      // Das Passwort kommt aus dem Feld im Formular, damit es nicht in einem Dialog im Klartext erscheint.
+      const password = $('form-passkeys').elements.password.value;
+      if (!password) {
+        showError($('passkeys-error'), 'Zum Löschen bitte zuerst das Passwort unten eintragen.');
+        $('form-passkeys').elements.password.focus();
+        return;
+      }
+      if (!window.confirm(`Passkey „${item.name}“ löschen? Damit ist die Anmeldung mit diesem Passkey nicht mehr möglich.`)) return;
+      try {
+        await withBusy(remove, () => api.deletePasskey(item.id, password));
+        $('form-passkeys').elements.password.value = '';
+        $('passkeys-notice').textContent = `Passkey „${item.name}“ wurde gelöscht.`;
+        $('passkeys-notice').hidden = false;
+        await loadPasskeys();
+      } catch (error) {
+        if (!handleAuthError(error)) showError($('passkeys-error'), error.message);
+      }
+    });
+
+    const actions = element('div', 'token-actions');
+    actions.append(rename, remove);
+    li.append(info, actions);
+    ul.append(li);
+  }
+}
+
+async function loadPasskeys() {
+  const token = routeToken;
+  try {
+    const list = await api.listPasskeys();
+    if (token === routeToken) renderPasskeys(list);
+  } catch (error) {
+    if (token === routeToken && !handleAuthError(error)) showError($('passkeys-error'), error.message);
+  }
+}
+
+function openPasskeysPage() {
+  openAccountPage('passkeys', 'Passkeys');
+  $('passkeys-notice').hidden = true;
+  const unavailable = $('passkeys-unavailable');
+  unavailable.hidden = true;
+  $('passkeys-add').disabled = false;
+  loadPasskeys();
+  const token = routeToken;
+  // Der Server wird bei jedem Öffnen gefragt, ob er Passkeys eingerichtet hat.
+  loadFeatures().then(() => {
+    if (token !== routeToken) return;
+    const message = !passkeysSupported()
+      ? 'Dieser Browser kann keine Passkeys einrichten (sie brauchen HTTPS und einen aktuellen Browser).'
+      : !serverPasskeys
+        ? 'Der Betreiber hat Passkeys nicht eingerichtet.'
+        : '';
+    showUnavailable(message);
+  });
+}
+
+function showUnavailable(message) {
+  const unavailable = $('passkeys-unavailable');
+  unavailable.textContent = message;
+  unavailable.hidden = !message;
+  $('passkeys-add').disabled = Boolean(message);
+}
+
+$('form-passkeys').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  clearError($('passkeys-error'));
+  $('passkeys-notice').hidden = true;
+  const { name, password } = form.elements;
+  try {
+    await withBusy($('passkeys-add'), async () => {
+      const options = await api.startPasskeyRegistration(name.value, password.value);
+      const credential = await createPasskey(options);
+      return api.finishPasskeyRegistration(credential);
+    });
+    const added = name.value.trim();
+    form.reset();
+    $('passkeys-notice').textContent = `Passkey „${added}“ wurde eingerichtet.`;
+    $('passkeys-notice').hidden = false;
+    await loadPasskeys();
+  } catch (error) {
+    if (handleAuthError(error)) return;
+    showError($('passkeys-error'), error.message);
+  }
+});
+
 $('form-password').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -466,6 +629,7 @@ function route() {
   else if (location.hash === '#/account/data') openDataPage();
   else if (location.hash === '#/account/display') openDisplayPage();
   else if (location.hash === '#/account/offline') openOfflinePage();
+  else if (location.hash === '#/account/passkeys') openPasskeysPage();
   else if (location.hash === '#/account/password') openAccountPage('password', 'Passwort ändern');
   else if (location.hash === '#/account/delete') openAccountPage('delete', 'Konto löschen');
   else openList();
@@ -1191,4 +1355,5 @@ async function init() {
   }
 }
 
+loadFeatures();
 init();

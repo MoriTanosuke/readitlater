@@ -32,6 +32,14 @@ pub struct Config {
     pub image_concurrency: usize,
     /// Maximale Größe eines heruntergeladenen Bildes in Bytes (`IMAGE_MAX_BYTES`).
     pub image_max_bytes: usize,
+    /// Öffentliche Adresse der App, z. B. `https://lesen.example.org` (`PASSKEY_ORIGIN`).
+    /// Ohne Angabe sind Passkeys aus. Sie wird nie aus Anfragen abgeleitet, sonst ließe sich
+    /// die Prüfung der Herkunft (Schutz vor Phishing) aushebeln.
+    pub passkey_origin: Option<String>,
+    /// Relying-Party-ID der Passkeys (`PASSKEY_RP_ID`). Standard: der Hostname von
+    /// `PASSKEY_ORIGIN`. ACHTUNG: Sie lässt sich später nicht mehr ändern, ohne alle
+    /// Passkeys zu entwerten.
+    pub passkey_rp_id: Option<String>,
     /// Ratenbegrenzung (`RATE_LIMIT_ENABLED`, Standard: an). Die Werte der einzelnen
     /// Stufen stehen in `ratelimit.rs`.
     pub rate_limits: RateLimitConfig,
@@ -52,6 +60,8 @@ impl Default for Config {
             image_store_enabled: true,
             image_concurrency: 2,
             image_max_bytes: 10 * 1024 * 1024,
+            passkey_origin: None,
+            passkey_rp_id: None,
             rate_limits: RateLimitConfig::default(),
         }
     }
@@ -73,12 +83,22 @@ impl Config {
             image_store_enabled: env_bool("IMAGE_STORE_ENABLED", defaults.image_store_enabled),
             image_concurrency: env_positive("IMAGE_CONCURRENCY", defaults.image_concurrency),
             image_max_bytes: env_positive("IMAGE_MAX_BYTES", defaults.image_max_bytes),
+            passkey_origin: env_text("PASSKEY_ORIGIN"),
+            passkey_rp_id: env_text("PASSKEY_RP_ID"),
             rate_limits: RateLimitConfig {
                 enabled: env_bool("RATE_LIMIT_ENABLED", defaults.rate_limits.enabled),
                 ..defaults.rate_limits
             },
         }
     }
+}
+
+/// Liest einen Text; leere Angaben gelten als nicht gesetzt.
+fn env_text(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
 }
 
 fn env_bool(name: &str, default: bool) -> bool {

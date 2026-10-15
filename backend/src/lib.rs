@@ -2,6 +2,7 @@
 
 pub mod articles;
 pub mod auth;
+pub mod cli;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -10,6 +11,7 @@ pub mod fetch;
 pub mod highlights;
 pub mod imageproc;
 pub mod images;
+pub mod passkeys;
 pub mod ratelimit;
 pub mod share;
 pub mod static_files;
@@ -45,15 +47,24 @@ pub struct AppState {
     pub limits: Arc<ratelimit::Limits>,
     /// Weckt den Bilder-Worker (`images::run_worker`), wenn neue Aufträge da sind.
     pub image_wakeup: Arc<Notify>,
+    /// Passkeys (WebAuthn); `None`, solange `PASSKEY_ORIGIN` nicht gesetzt ist.
+    pub passkeys: Option<Arc<passkeys::PasskeyService>>,
 }
 
 impl AppState {
-    pub fn new(pool: SqlitePool, config: Config) -> Result<Self, reqwest::Error> {
+    pub fn new(pool: SqlitePool, config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let fetcher = Fetcher::new(
             config.fetch_allow_private,
             Duration::from_secs(config.fetch_timeout_secs),
             config.fetch_max_bytes,
         )?;
+        let passkeys = match &config.passkey_origin {
+            Some(origin) => Some(Arc::new(passkeys::PasskeyService::new(
+                origin,
+                config.passkey_rp_id.as_deref(),
+            )?)),
+            None => None,
+        };
         Ok(Self {
             pool,
             fetcher: Arc::new(fetcher),
@@ -61,6 +72,7 @@ impl AppState {
             import_slot: Arc::new(Semaphore::new(1)),
             limits: Arc::new(ratelimit::Limits::new(config.rate_limits)),
             image_wakeup: Arc::new(Notify::new()),
+            passkeys,
             config: Arc::new(config),
         })
     }
@@ -68,12 +80,16 @@ impl AppState {
 
 /// Baut den Router. Die Schnittstelle liegt unter `/api`, der Rest ist das Frontend.
 pub fn app(state: AppState) -> Router {
-    // Routen, die Passwörter prüfen oder hashen: strengere Ratenbegrenzung pro IP.
+    // Routen, die Passwörter prüfen oder hashen (auch die Passkey-Anmeldung und das Bestätigen mit
+    // dem Passwort beim Einrichten eines Passkeys): strengere Ratenbegrenzung pro IP.
     let password_routes = Router::new()
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
         .route("/account", delete(auth::delete_account))
         .route("/account/password", put(auth::change_password))
+        .route("/passkeys/register/start", post(passkeys::register_start))
+        .route("/passkeys/login/start", post(passkeys::login_start))
+        .route("/passkeys/login/finish", post(passkeys::login_finish))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             ratelimit::auth,
@@ -83,6 +99,13 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
+        .route("/features", get(passkeys::features))
+        .route("/passkeys", get(passkeys::list))
+        .route("/passkeys/register/finish", post(passkeys::register_finish))
+        .route(
+            "/passkeys/{id}",
+            patch(passkeys::rename).delete(passkeys::remove),
+        )
         .merge(password_routes)
         .route("/articles", post(articles::create).get(articles::list))
         .route(

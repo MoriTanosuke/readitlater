@@ -458,3 +458,46 @@ async fn standardwerte_lassen_normale_nutzung_zu() {
         assert_eq!(a.status, StatusCode::OK);
     }
 }
+
+#[tokio::test]
+async fn passkey_anmeldung_hat_das_strengere_limit_pro_ip() {
+    let app = setup_with(Config {
+        rate_limits: RateLimitConfig {
+            auth: Rule::new(3, HOUR),
+            ..wide()
+        },
+        passkey_origin: Some("https://lesen.test".into()),
+        ..test_config()
+    })
+    .await;
+    let start = |ip: &'static str| {
+        send(
+            &app,
+            Method::POST,
+            "/api/passkeys/login/start",
+            Some(json!({})),
+            None,
+            ip,
+        )
+    };
+
+    for _ in 0..3 {
+        assert_eq!(start("203.0.113.1").await.status, StatusCode::OK);
+    }
+    let blocked = start("203.0.113.1").await;
+    assert_eq!(blocked.status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(blocked.headers.contains_key(header::RETRY_AFTER));
+    // Das Limit gilt für die ganze Gruppe, auch für den Abschluss.
+    let finish = send(
+        &app,
+        Method::POST,
+        "/api/passkeys/login/finish",
+        Some(json!({})),
+        None,
+        "203.0.113.1",
+    )
+    .await;
+    assert_eq!(finish.status, StatusCode::TOO_MANY_REQUESTS);
+    // Eine andere Adresse hat ihren eigenen Zähler.
+    assert_eq!(start("203.0.113.2").await.status, StatusCode::OK);
+}
