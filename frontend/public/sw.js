@@ -29,6 +29,7 @@ const SHELL = [
   '/js/backlink.js',
   '/js/highlights.js',
   '/js/offline.js',
+  '/js/passkeys.js',
   '/js/position.js',
   '/js/reading.js',
   '/js/safe-html.js',

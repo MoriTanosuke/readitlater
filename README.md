@@ -40,6 +40,32 @@ lesen.example.org {
 
 **Registrierung:** Nach dem Anlegen der eigenen Konten `REGISTRATION_ENABLED=false` in `.env` setzen und `docker compose up -d` ausführen.
 
+## Passkeys (Anmeldung ohne Passwort)
+
+Neben dem Passwort kann man sich mit Passkeys anmelden (Fingerabdruck, Gesichtserkennung, Geräte-PIN, Passwortmanager oder Sicherheitsschlüssel). Sie sind abgeschaltet, bis in `.env` die Adresse der App steht:
+
+```sh
+PASSKEY_ORIGIN=https://lesen.kopis.de   # genau die Adresse im Browser, mit https://, ohne Pfad
+```
+
+Danach `docker compose up -d`. Wichtig:
+
+- **Die Domain ist dauerhaft.** Ein Passkey ist an die Domain gebunden (RP-ID, Standard: der Host aus `PASSKEY_ORIGIN`). Ändert sich die Domain, funktionieren alle Passkeys nicht mehr. Das Passwort geht weiter, die Passkeys müssen dann neu eingerichtet werden.
+- **Das Passwort bleibt Pflicht.** Es ist der Rückfallweg und wird zum Einrichten und Löschen eines Passkeys abgefragt. Es gibt keine Konten nur mit Passkey.
+- **Einrichten** unter Benutzermenü → „Passkeys“ (bis zu 10 pro Konto, je Gerät einer). Die Anmeldeseite zeigt dann „Mit Passkey anmelden“, ohne E-Mail einzugeben. Sicherheitsschlüssel müssen gespeicherte (discoverable) Passkeys unterstützen (FIDO2 mit Resident Keys).
+- Das Teilen aus Android und iOS (Tokens) ist unabhängig von Passkeys und funktioniert unverändert.
+
+**Ausgesperrt?** Es gibt bewusst keinen Reset per E-Mail. Stattdessen setzt der Betreiber auf dem Server die Zugangsdaten zurück (die App läuft dabei weiter):
+
+```sh
+# neues Passwort wird abgefragt; alle Sitzungen werden beendet
+docker compose exec app /app/readlater-backend reset-credentials user@example.org
+# zusätzlich alle Passkeys bzw. alle Teilen-Tokens des Kontos entfernen
+docker compose exec app /app/readlater-backend reset-credentials user@example.org --revoke-passkeys --revoke-share-tokens
+# ohne Terminal: neues Passwort von der Standardeingabe lesen
+echo 'neues-passwort-123' | docker compose exec -T app /app/readlater-backend reset-credentials user@example.org --password-stdin
+```
+
 ## Artikel aus anderen Apps teilen
 
 Im Benutzermenü (E-Mail oben rechts) gibt es „Teilen aus Apps“. Dort legst du pro Gerät ein Token an (wird nur einmal angezeigt, es lässt sich einzeln widerrufen). Ein Token darf ausschließlich Artikel hinzufügen. Das Gerät muss den Server erreichen können, bei rein internem Betrieb also im Heimnetz, per VPN oder über Tailscale.

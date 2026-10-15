@@ -46,6 +46,10 @@
         <p id="auth-error" class="error" role="alert" hidden></p>
         <button type="submit" id="auth-submit" class="primary">Anmelden</button>
       </form>
+      <div id="passkey-login" class="passkey-login" hidden>
+        <p class="hint">oder</p>
+        <button type="button" id="btn-passkey-login" class="wide">Mit Passkey anmelden</button>
+      </div>
     </section>
 
     <section id="view-home" hidden>
@@ -61,6 +65,7 @@
               <li><a href="#/account/share">Teilen aus Apps</a></li>
               <li><a href="#/account/offline">Offline-Lesen</a></li>
               <li><a href="#/account/data">Export und Import</a></li>
+              <li><a href="#/account/passkeys">Passkeys</a></li>
               <li><a href="#/account/password">Passwort ändern</a></li>
               <li><a href="#/account/delete" class="menu-danger">Konto löschen</a></li>
             </ul>
@@ -197,6 +202,40 @@
           <li>Anfragetext: „Datei“ bzw. Text mit der Variable „Kurzbefehleingabe“.</li>
         </ol>
       </details>
+    </section>
+
+    <section id="view-passkeys" hidden>
+      <h1>Passkeys</h1>
+      <p>Mit einem Passkey meldest du dich ohne Passwort an, per Fingerabdruck, Gesichtserkennung
+        oder Geräte-PIN. Du kannst mehrere einrichten, zum Beispiel einen für dein iPhone, einen
+        für dein Android-Gerät und einen in deinem Passwortmanager. Passkeys werden zwischen Apple-
+        und Android-Geräten nicht von selbst abgeglichen, richte dort jeweils einen eigenen ein.
+        Das Passwort bleibt als Rückweg bestehen.</p>
+
+      <h2>Deine Passkeys</h2>
+      <p id="passkeys-empty" class="empty" hidden>Noch keine Passkeys.</p>
+      <ul id="passkeys-list" class="token-list"></ul>
+      <p class="hint">Löschen entfernt den Passkey nur aus der Leseliste. Im Gerät oder im
+        Passwortmanager bleibt er bestehen und lässt sich dort getrennt löschen.</p>
+
+      <form id="form-passkeys">
+        <h2>Passkey hinzufügen</h2>
+        <label>Name für das Gerät
+          <input type="text" name="name" maxlength="60" placeholder="z. B. iPhone, Laptop oder YubiKey" autocomplete="off" required>
+        </label>
+        <label>Passwort zur Bestätigung
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <p class="hint">Das Passwort wird auch verlangt, wenn du einen Passkey löschst. Trage es dazu
+          in dieses Feld ein.</p>
+        <p id="passkeys-unavailable" class="error" hidden></p>
+        <p id="passkeys-error" class="error" role="alert" hidden></p>
+        <p id="passkeys-notice" class="success" role="status" hidden></p>
+        <div class="form-actions">
+          <button type="submit" id="passkeys-add" class="primary">Passkey hinzufügen</button>
+          <a href="#/" class="button-link">Zurück zur Liste</a>
+        </div>
+      </form>
     </section>
 
     <section id="view-password" hidden>

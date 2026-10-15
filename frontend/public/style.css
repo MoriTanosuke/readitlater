@@ -380,6 +380,12 @@ a { color: var(--accent); }
 }
 .token-info { display: grid; gap: 0.125rem; min-width: 0; }
 #view-share code { overflow-wrap: anywhere; }
+
+/* Passkeys */
+.passkey-login { text-align: center; margin-top: 1rem; }
+.passkey-login .wide { margin-top: 0.5rem; }
+.token-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+#view-passkeys h2 { margin-top: 1.5rem; }
 #view-share details { margin: 0.5rem 0; }
 #view-share summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center; }
 

@@ -17,6 +17,8 @@ hex = "0.4"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 mime_guess = "2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "charset", "gzip", "brotli"] }
+# Passwortabfrage ohne Echo im Befehl `reset-credentials` (klein, nur libc)
+rpassword = "7"
 rust-embed = "8"
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
@@ -29,10 +31,18 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.8"
 whatlang = "0.18.0"
+# Passkeys (WebAuthn). Bewusst 0.6: rein in Rust (RustCrypto), die stabile 0.5 braucht OpenSSL
+# und würde den statischen musl-Build im Docker-Image kaputt machen. "conditional-ui" schaltet die
+# Anmeldung ohne Benutzernamen (discoverable credentials) frei. Siehe CLAUDE.md.
+webauthn-rs = { version = "0.6.1-dev", features = ["conditional-ui"] }
 
 [dev-dependencies]
+# Für den Test-Authenticator in tests/common/authenticator.rs (Passkeys ohne echtes Gerät)
+base64 = "0.22"
+ciborium = "0.2"
 flate2 = "1.1.10"
 http-body-util = "0.1"
+p256 = { version = "0.13", features = ["ecdsa"] }
 tower = { version = "0.5", features = ["util"] }
 
 # Argon2 ist im Debug-Build sehr langsam, daher nur diese Pakete auch in Tests optimieren.

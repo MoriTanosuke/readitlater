@@ -14,6 +14,8 @@ pub enum ApiError {
     Unauthorized,
     /// Falsche E-Mail oder falsches Passwort (bewusst nicht unterscheidbar).
     BadCredentials,
+    /// Die Anmeldung mit einem Passkey ist fehlgeschlagen (Grund bewusst nicht unterscheidbar).
+    BadPasskey,
     Forbidden(String),
     NotFound(String),
     Conflict(String),
@@ -68,6 +70,10 @@ impl IntoResponse for ApiError {
             Self::BadCredentials => (
                 StatusCode::UNAUTHORIZED,
                 "E-Mail oder Passwort ist falsch".to_string(),
+            ),
+            Self::BadPasskey => (
+                StatusCode::UNAUTHORIZED,
+                "Anmeldung mit Passkey fehlgeschlagen".to_string(),
             ),
             Self::Forbidden(m) => (StatusCode::FORBIDDEN, m),
             Self::NotFound(m) => (StatusCode::NOT_FOUND, m),

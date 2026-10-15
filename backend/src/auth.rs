@@ -45,8 +45,8 @@ pub struct PasswordChange {
 
 #[derive(Serialize)]
 pub struct UserOut {
-    id: i64,
-    email: String,
+    pub(crate) id: i64,
+    pub(crate) email: String,
 }
 
 /// Angemeldeter Benutzer (Extraktor, liest das Session-Cookie).
@@ -261,6 +261,29 @@ pub async fn delete_account(
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
 
+/// Verlangt das Passwort des angemeldeten Benutzers erneut (für sicherheitsrelevante Aktionen
+/// wie das Verwalten von Passkeys). Gleiche Ratenbegrenzung und gleiche Fehlermeldung wie beim
+/// Ändern des Passworts.
+pub(crate) async fn confirm_password(
+    state: &AppState,
+    user_id: i64,
+    password: String,
+) -> Result<(), ApiError> {
+    state.limits.check_password_action(user_id)?;
+    let stored_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(&state.pool)
+        .await?;
+    let valid = tokio::task::spawn_blocking(move || verify_password(&password, &stored_hash))
+        .await
+        .map_err(ApiError::internal)?;
+    if valid {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden("Passwort ist falsch".into()))
+    }
+}
+
 fn normalize_email(raw: &str) -> Result<String, ApiError> {
     let email = raw.trim().to_lowercase();
     let valid = email.len() <= MAX_EMAIL_LEN
@@ -279,7 +302,7 @@ fn normalize_email(raw: &str) -> Result<String, ApiError> {
     }
 }
 
-fn validate_password(password: &str) -> Result<(), ApiError> {
+pub(crate) fn validate_password(password: &str) -> Result<(), ApiError> {
     let len = password.chars().count();
     if len < MIN_PASSWORD_LEN {
         return Err(ApiError::BadRequest(format!(
@@ -294,14 +317,14 @@ fn validate_password(password: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn hash_password(password: &str) -> Result<String, ApiError> {
+pub(crate) fn hash_password(password: &str) -> Result<String, ApiError> {
     Argon2::default()
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(ApiError::internal)
 }
 
-fn verify_password(password: &str, stored_hash: &str) -> bool {
+pub(crate) fn verify_password(password: &str, stored_hash: &str) -> bool {
     match PasswordHash::new(stored_hash) {
         Ok(parsed) => Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
@@ -326,7 +349,7 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-async fn create_session(state: &AppState, user_id: i64) -> Result<String, ApiError> {
+pub(crate) async fn create_session(state: &AppState, user_id: i64) -> Result<String, ApiError> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(ApiError::internal)?;
     let token = hex::encode(bytes);
@@ -351,7 +374,7 @@ pub async fn purge_expired_sessions(state: &AppState) {
     }
 }
 
-fn session_cookie(state: &AppState, token: String) -> Cookie<'static> {
+pub(crate) fn session_cookie(state: &AppState, token: String) -> Cookie<'static> {
     Cookie::build((COOKIE_NAME, token))
         .path("/")
         .http_only(true)

@@ -41,6 +41,7 @@ test('Benutzermenü, Passwort ändern und Konto löschen', async (t) => {
       ['Teilen aus Apps', '#/account/share'],
       ['Offline-Lesen', '#/account/offline'],
     ['Export und Import', '#/account/data'],
+      ['Passkeys', '#/account/passkeys'],
       ['Passwort ändern', '#/account/password'],
       ['Konto löschen', '#/account/delete'],
     ],

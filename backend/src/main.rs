@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use readlater_backend::{AppState, app, auth, config::Config, db, images};
+use readlater_backend::{AppState, app, auth, cli, config::Config, db, images};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -26,6 +26,12 @@ async fn main() {
         });
     }
 
+    // Betreiberbefehl: Passwort neu setzen (siehe cli.rs).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("reset-credentials") {
+        std::process::exit(reset_credentials_command(&config, &args[1..]).await);
+    }
+
     let pool = match db::connect(&config.database_path).await {
         Ok(pool) => pool,
         Err(e) => {
@@ -40,7 +46,7 @@ async fn main() {
     let state = match AppState::new(pool, config) {
         Ok(state) => state,
         Err(e) => {
-            tracing::error!("HTTP-Client konnte nicht erstellt werden: {e}");
+            tracing::error!("Anwendung konnte nicht gestartet werden: {e}");
             std::process::exit(1);
         }
     };
@@ -78,12 +84,17 @@ async fn main() {
         }
     };
     tracing::info!(
-        "Backend lauscht auf {} (Registrierung: {})",
+        "Backend lauscht auf {} (Registrierung: {}, Passkeys: {})",
         state.config.bind_addr,
         if state.config.registration_enabled {
             "offen"
         } else {
             "geschlossen"
+        },
+        if state.passkeys.is_some() {
+            "an"
+        } else {
+            "aus"
         }
     );
 
@@ -99,6 +110,85 @@ async fn main() {
         tracing::error!("Server beendet mit Fehler: {e}");
         std::process::exit(1);
     }
+}
+
+/// `reset-credentials <E-Mail>`: fragt zweimal nach dem neuen Passwort (ohne Echo) und setzt es.
+/// Gibt den Exit-Code zurück.
+async fn reset_credentials_command(config: &Config, args: &[String]) -> i32 {
+    let parsed = match cli::parse_reset_args(args) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            eprintln!("{message}\n\n{}", cli::RESET_USAGE);
+            return 2;
+        }
+    };
+    // Eine fehlende Datei nicht stillschweigend neu anlegen: Dann stimmt DATABASE_PATH nicht.
+    if !std::path::Path::new(&config.database_path).exists() {
+        eprintln!("Die Datenbank {} existiert nicht", config.database_path);
+        return 1;
+    }
+    let password = match read_new_password(parsed.password_stdin) {
+        Ok(password) => password,
+        Err(message) => {
+            eprintln!("{message}");
+            return 1;
+        }
+    };
+    let pool = match db::connect(&config.database_path).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            eprintln!("Datenbank konnte nicht geöffnet werden: {e}");
+            return 1;
+        }
+    };
+    let options = cli::ResetOptions {
+        email: parsed.email.clone(),
+        new_password: password,
+        revoke_passkeys: parsed.revoke_passkeys,
+        revoke_share_tokens: parsed.revoke_share_tokens,
+    };
+    match cli::reset_credentials(&pool, &options).await {
+        Ok(report) => {
+            println!(
+                "Passwort für {} gesetzt.",
+                parsed.email.trim().to_lowercase()
+            );
+            println!("Beendete Sitzungen: {}", report.sessions_ended);
+            if parsed.revoke_passkeys {
+                println!("Gelöschte Passkeys: {}", report.passkeys_removed);
+            }
+            if parsed.revoke_share_tokens {
+                println!(
+                    "Gelöschte Tokens zum Teilen: {}",
+                    report.share_tokens_removed
+                );
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            1
+        }
+    }
+}
+
+/// Liest das neue Passwort: aus der Standardeingabe (für Skripte) oder mit Rückfrage ohne Echo.
+fn read_new_password(from_stdin: bool) -> Result<String, String> {
+    if from_stdin {
+        let mut line = String::new();
+        std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|e| format!("Eingabe konnte nicht gelesen werden: {e}"))?;
+        return Ok(line.trim_end_matches(['\r', '\n']).to_owned());
+    }
+    let first = rpassword::prompt_password("Neues Passwort: ")
+        .map_err(|e| format!("Eingabe konnte nicht gelesen werden: {e}"))?;
+    let second = rpassword::prompt_password("Wiederholen: ")
+        .map_err(|e| format!("Eingabe konnte nicht gelesen werden: {e}"))?;
+    if first != second {
+        return Err("Die Passwörter stimmen nicht überein".into());
+    }
+    Ok(first)
 }
 
 async fn shutdown_signal() {

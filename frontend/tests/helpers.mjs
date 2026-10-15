@@ -200,12 +200,12 @@ export async function openApp(backendUrl, { url = 'http://app.test/' } = {}) {
   };
 }
 
-/** Startet Backend und Frontend; `pages` sind die Seiten des Testservers. */
+/** Startet Backend und Frontend; `pages` sind die Seiten des Testservers, `options.env` ergänzt die Umgebung des Backends. */
 export async function setup(pages = {}, options = {}) {
   const site = await startSite(pages);
   let backend;
   try {
-    backend = await startBackend();
+    backend = await startBackend(options.env);
     const url = typeof options.url === 'function' ? options.url(site) : options.url;
     const app = await openApp(backend.url, { url });
     return {

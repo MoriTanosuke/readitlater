@@ -1,6 +1,8 @@
 //! Gemeinsame Hilfen für die Integrationstests.
 #![allow(dead_code)] // Jede Testdatei nutzt nur einen Teil davon.
 
+pub mod authenticator;
+
 use axum::{
     Router,
     body::Body,
@@ -148,6 +150,7 @@ pub async fn count(pool: &SqlitePool, table: &str) -> i64 {
         "tags" => "SELECT COUNT(*) FROM tags",
         "article_tags" => "SELECT COUNT(*) FROM article_tags",
         "highlights" => "SELECT COUNT(*) FROM highlights",
+        "passkeys" => "SELECT COUNT(*) FROM passkeys",
         other => panic!("unbekannte Tabelle: {other}"),
     };
     sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
