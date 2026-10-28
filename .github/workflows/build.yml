@@ -51,6 +51,12 @@ jobs:
           npm ci
           npm run test:ci
 
+      # Der Reporter zeigt die Zeit einzelner Tests nicht an: sie wird an den Testnamen gehängt.
+      - name: Testzeiten an die Testnamen hängen
+        if: ${{ !cancelled() }}
+        working-directory: .
+        run: node .github/scripts/junit-test-time.mjs backend/target/nextest/ci/junit.xml frontend/tests/junit.xml
+
       # Auswertung der JUnit-Berichte (laufen auch nach fehlgeschlagenen Tests).
       # Bei Pull Requests aus Forks fehlt dem Token die Berechtigung checks: write.
       - name: Backend-Testbericht
