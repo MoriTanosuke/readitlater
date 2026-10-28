@@ -32,6 +32,10 @@ jobs:
       # Lokal reicht weiterhin `cargo test`.
       - uses: taiki-e/install-action@nextest
       - run: cargo nextest run --profile ci --locked
+      # nextest schreibt keine Zeit an die Suites; ohne sie zeigt der Reporter „NaNms“.
+      - name: Suite-Zeiten im JUnit-Bericht ergänzen
+        if: ${{ !cancelled() }}
+        run: node ../.github/scripts/junit-suite-time.mjs target/nextest/ci/junit.xml
 
       # Frontend-Tests: echtes Frontend in jsdom gegen das gebaute Backend.
       # Node und npm werden nur dafür gebraucht und gelangen nicht in die Images.
