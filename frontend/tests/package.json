@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Tests für das Frontend (jsdom gegen das echte Backend). Nur Entwicklungswerkzeug, nicht Teil des Images.",
   "scripts": {
-    "test": "node --test \"*.test.mjs\""
+    "test": "node --test \"*.test.mjs\"",
+    "test:ci": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=junit.xml \"*.test.mjs\"; s=$?; node junit-wrap.mjs junit.xml; exit $s"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.5",

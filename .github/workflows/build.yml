@@ -10,6 +10,10 @@ permissions:
 
 jobs:
   test:
+    # checks: write braucht dorny/test-reporter, um das Ergebnis als Check-Run anzuzeigen.
+    permissions:
+      contents: read
+      checks: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,7 +28,10 @@ jobs:
           workspaces: backend
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo test --locked
+      # cargo-nextest schreibt den JUnit-Bericht (backend/.config/nextest.toml, Profil ci).
+      # Lokal reicht weiterhin `cargo test`.
+      - uses: taiki-e/install-action@nextest
+      - run: cargo nextest run --profile ci --locked
 
       # Frontend-Tests: echtes Frontend in jsdom gegen das gebaute Backend.
       # Node und npm werden nur dafür gebraucht und gelangen nicht in die Images.
@@ -38,7 +45,26 @@ jobs:
         working-directory: frontend/tests
         run: |
           npm ci
-          npm test
+          npm run test:ci
+
+      # Auswertung der JUnit-Berichte (laufen auch nach fehlgeschlagenen Tests).
+      # Bei Pull Requests aus Forks fehlt dem Token die Berechtigung checks: write.
+      - name: Backend-Testbericht
+        uses: dorny/test-reporter@v2
+        if: ${{ !cancelled() }}
+        with:
+          name: Backend-Tests
+          path: backend/target/nextest/ci/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+      - name: Frontend-Testbericht
+        uses: dorny/test-reporter@v2
+        if: ${{ !cancelled() }}
+        with:
+          name: Frontend-Tests
+          path: frontend/tests/junit.xml
+          reporter: java-junit
+          fail-on-error: false
 
   images:
     needs: test

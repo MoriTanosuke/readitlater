@@ -1,0 +1,7 @@
+# Nur für die CI: schreibt zusätzlich zur Konsolenausgabe einen JUnit-Bericht,
+# den dorny/test-reporter auswertet (Pfad: backend/target/nextest/ci/junit.xml).
+[profile.ci]
+fail-fast = false
+
+[profile.ci.junit]
+path = "junit.xml"
