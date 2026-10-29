@@ -2804,7 +2804,7 @@ dependencies = [
  "argon2 0.6.0",
  "axum",
  "axum-extra",
- "base64 0.22.1",
+ "base64 0.23.1",
  "ciborium",
  "dom_smoothie",
  "encoding_rs",
