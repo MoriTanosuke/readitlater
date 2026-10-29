@@ -1,0 +1,60 @@
+name: audit
+
+# Prüft die Abhängigkeiten auf bekannte Schwachstellen. Eigener Workflow statt eines
+# Schritts im Job `test` aus zwei Gründen: Neue Meldungen entstehen ohne Codeänderung
+# (deshalb der tägliche Lauf), und eine neue Meldung soll nicht jeden fremden
+# Pull Request blockieren.
+#
+# Behoben wird nicht in der CI, sondern per Pull Request (Dependabot oder von Hand),
+# weil jeder Push auf `main` automatisch deployt. Nicht behebbare Meldungen werden
+# mit Begründung in backend/.cargo/audit.toml ausgeschlossen.
+#
+# Bewusst kein Pflicht-Check: mit Pfadfilter würde ein nicht ausgelöster Pflicht-Check
+# den Merge für immer blockieren.
+
+on:
+  pull_request:
+    paths:
+      - backend/Cargo.toml
+      - backend/Cargo.lock
+      - backend/.cargo/audit.toml
+      - frontend/tests/package-lock.json
+      - .github/workflows/audit.yml
+  push:
+    branches: [main]
+  schedule:
+    # täglich 05:17 UTC (nicht zur vollen Stunde, dort ist bei GitHub viel los)
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # Fertige Binärdatei statt Kompilieren.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      # Liest backend/.cargo/audit.toml. --deny warnings: auch Warnungen
+      # (unmaintained, unsound, yanked) lassen den Lauf fehlschlagen.
+      - name: cargo audit
+        working-directory: backend
+        run: cargo audit --deny warnings
+
+  # Nur Testwerkzeug (jsdom), das nicht im Image landet. Der Job zeigt Meldungen an,
+  # ist aber kein Pflicht-Check.
+  npm-audit:
+    name: npm audit (Testwerkzeuge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: npm audit
+        working-directory: frontend/tests
+        run: npm audit --audit-level=high

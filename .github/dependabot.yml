@@ -1,0 +1,56 @@
+# Dependabot: wöchentliche Versions-Updates. Sicherheits-Updates für bekannte
+# Schwachstellen kommen zusätzlich sofort, unabhängig vom Zeitplan.
+#
+# Jeder Merge auf `main` deployt automatisch (Watchtower). Dependabot-Pull-Requests
+# deshalb nur nach grüner CI von Hand mergen, nicht automatisch.
+#
+# Das Frontend (`frontend/public`) hat keine Abhängigkeiten. Geprüft wird nur das
+# Testwerkzeug in `frontend/tests`.
+version: 2
+
+updates:
+  # Backend (Rust). Patch-Updates in einem PR gebündelt, Minor- und Major-Updates
+  # einzeln: bei 0.x-Crates sind Minor-Updates oft inkompatibel (z. B. 0.5 -> 0.6).
+  - package-ecosystem: cargo
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    groups:
+      rust-patch:
+        update-types: [patch]
+
+  # GitHub Actions in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  # Basis-Images im Dockerfile (rust, distroless)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+
+  # Testwerkzeuge (jsdom usw.), landen nie im Image
+  - package-ecosystem: npm
+    directory: /frontend/tests
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    groups:
+      test-tools:
+        update-types: [minor, patch]
