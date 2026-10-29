@@ -50,7 +50,7 @@ jobs:
       # Auswertung der JUnit-Berichte (laufen auch nach fehlgeschlagenen Tests).
       # Bei Pull Requests aus Forks fehlt dem Token die Berechtigung checks: write.
       - name: Backend-Testbericht
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
         with:
           name: Backend-Tests
@@ -58,7 +58,7 @@ jobs:
           reporter: java-junit
           fail-on-error: false
       - name: Frontend-Testbericht
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
         with:
           name: Frontend-Tests
