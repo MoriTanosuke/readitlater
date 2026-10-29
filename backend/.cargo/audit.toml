@@ -1,0 +1,21 @@
+# Konfiguration für `cargo audit` (cargo-audit liest diese Datei automatisch).
+#
+# Jede Ausnahme braucht eine Begründung und einen Auslöser zur Neubewertung.
+# Neue Meldungen sollen auffallen, deshalb hier nichts pauschal ausschließen.
+
+[advisories]
+ignore = [
+  # rsa 0.9.x, Marvin-Angriff (Schlüsselrückgewinnung per Timing-Seitenkanal).
+  # Kommt über webauthn-rs-core. Der Angriff betrifft private RSA-Schlüssel, der
+  # Server prüft aber nur öffentliche Signaturen und hält keinen geheimen Schlüssel.
+  # Es gibt keine korrigierte Version.
+  # Neu bewerten: bei jeder neuen webauthn-rs-Version, spätestens bei stabiler 0.6.
+  "RUSTSEC-2023-0071",
+
+  # crypto-bigint 0.5.x, Timing-Probleme bei Operationen, die konstante Zeit haben sollen.
+  # Kommt über elliptic-curve/p256 aus webauthn-rs. Der Server prüft nur öffentliche
+  # Signaturen und rechnet nie mit geheimen Schlüsseln. Ein Fix liegt nur in einer neuen
+  # Hauptversion von elliptic-curve, also bei webauthn-rs.
+  # Neu bewerten: bei jeder neuen webauthn-rs-Version, spätestens bei stabiler 0.6.
+  "RUSTSEC-2026-0387",
+]
