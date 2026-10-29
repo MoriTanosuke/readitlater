@@ -42,7 +42,7 @@ base64 = "0.23"
 ciborium = "0.2"
 flate2 = "1.1.10"
 http-body-util = "0.1"
-p256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
 tower = { version = "0.5", features = ["util"] }
 
 # Argon2 ist im Debug-Build sehr langsam, daher nur diese Pakete auch in Tests optimieren.
