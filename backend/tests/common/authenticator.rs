@@ -61,7 +61,7 @@ impl SoftAuthenticator {
         })
         .to_string();
 
-        let point = self.key.verifying_key().to_encoded_point(false);
+        let point = self.key.verifying_key().to_sec1_point(false);
         let cose_key = Cbor::Map(vec![
             (Cbor::Integer(1.into()), Cbor::Integer(2.into())),
             (Cbor::Integer(3.into()), Cbor::Integer((-7).into())),
