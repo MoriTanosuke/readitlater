@@ -62,6 +62,18 @@ test('Artikel offline lesen, durchsuchen, als gelesen vormerken und abmelden', a
   });
   assert.equal(hl.status, 201);
 
+  // Der Abgleich im Hintergrund startet beim ersten Laden der Liste und läuft nebenher.
+  // Sieht er einen Artikel, bevor die Markierung existiert, bleibt dessen gespeicherte
+  // Fassung bei späteren Abgleichen unverändert (Markierungen kommen nur beim ersten
+  // Speichern mit). Ob er das tut, hängt vom Zeitablauf ab, auf einem langsamen Rechner
+  // (CI) also mal ja, mal nein. Deshalb: den Abgleich abwarten und den Speicher leeren,
+  // damit die Aktualisierung unten immer alles frisch mit Markierung holt.
+  const { api } = await import('../public/js/api.js');
+  await offline.sync(api);
+  await offline.remove(artikel.id);
+  await offline.remove(kaffee.id);
+  assert.equal(await offline.count(), 0);
+
   // ---- Einstellungsseite: „Jetzt aktualisieren“ speichert die ungelesenen Artikel
   window.location.hash = '#/account/offline';
   await until(() => visible('view-offline'), 'Seite Offline-Lesen');
