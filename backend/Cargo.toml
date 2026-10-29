@@ -38,7 +38,7 @@ webauthn-rs = { version = "0.6.1-dev", features = ["conditional-ui"] }
 
 [dev-dependencies]
 # Für den Test-Authenticator in tests/common/authenticator.rs (Passkeys ohne echtes Gerät)
-base64 = "0.22"
+base64 = "0.23"
 ciborium = "0.2"
 flate2 = "1.1.10"
 http-body-util = "0.1"
