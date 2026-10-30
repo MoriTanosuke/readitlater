@@ -80,6 +80,10 @@ async fn webfont_wird_selbst_ausgeliefert() {
     for file in [
         "/fonts/inter-latin-wght-normal.woff2",
         "/fonts/inter-latin-ext-wght-normal.woff2",
+        "/fonts/literata-latin-wght-normal.woff2",
+        "/fonts/literata-latin-wght-italic.woff2",
+        "/fonts/literata-latin-ext-wght-normal.woff2",
+        "/fonts/literata-latin-ext-wght-italic.woff2",
     ] {
         let res = get(&app, file, None).await;
         assert_eq!(res.status(), StatusCode::OK, "{file}");

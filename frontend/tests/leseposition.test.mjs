@@ -296,6 +296,37 @@ spec('Nachladende Bilder verschieben den Text: die Stelle wird nachgeführt', as
   await openList();
 });
 
+spec('Nachladende Webfonts verschieben den Text: die Stelle wird nachgeführt', async (t) => {
+  const ok = steps(t);
+  // jsdom kennt document.fonts nicht: ein EventTarget stellt das Ereignis `loadingdone` nach.
+  const fonts = new window.EventTarget();
+  Object.defineProperty(window.document, 'fonts', { value: fonts, configurable: true });
+  try {
+    await serverPatch(articleId, { read_pos: offsetFor(5, 0) });
+    await openReader(articleId);
+    await untilAsync(() => Math.abs(scrollY - scrollYFor(5, 0)) <= 2, 'Stelle wiederhergestellt');
+
+    // Die Schrift lädt nach, der Text wird 80 px höher und schiebt die Stelle nach unten.
+    extra = 80;
+    fonts.dispatchEvent(new window.Event('loadingdone'));
+    await untilAsync(() => Math.abs(scrollY - scrollYFor(5, 0)) <= 2, 'Stelle nachgeführt');
+    ok('Schrift lädt nach, die gemerkte Stelle bleibt im Blick');
+
+    // Nach einer Eingabe des Benutzers wird nichts mehr verschoben.
+    window.dispatchEvent(new window.Event('wheel'));
+    const stay = scrollY;
+    extra = 200;
+    fonts.dispatchEvent(new window.Event('loadingdone'));
+    await sleep(100);
+    assert.equal(scrollY, stay, 'nach Eingabe bleibt der Benutzer, wo er ist');
+    ok('nach einer Eingabe wird die Ansicht nicht mehr verschoben');
+  } finally {
+    extra = 0;
+    delete window.document.fonts;
+    await openList();
+  }
+});
+
 spec('Ohne Verbindung wird die Position vorgemerkt und beim Abgleich gesendet', async (t) => {
   const ok = steps(t);
   await serverPatch(articleId, { read_pos: 0 });

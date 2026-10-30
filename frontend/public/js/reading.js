@@ -10,7 +10,7 @@ const EVENT = 'leseliste:display';
 
 export const FONTS = {
   sans: 'Systemschrift',
-  serif: 'Serif',
+  serif: 'Serif (Literata)',
   wide: 'Breite Schrift',
   mono: 'Monospace',
 };
