@@ -33,6 +33,8 @@ const SHELL = [
   '/js/position.js',
   '/js/reading.js',
   '/js/safe-html.js',
+  '/fonts/inter-latin-wght-normal.woff2',
+  '/fonts/inter-latin-ext-wght-normal.woff2',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];

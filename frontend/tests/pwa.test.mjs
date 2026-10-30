@@ -208,6 +208,7 @@ test('Die Dateiliste des Service Workers deckt alle App-Dateien ab', () => {
     '/style.css',
     '/manifest.webmanifest',
     ...readdirSync(path.join(PUBLIC, 'js')).map((f) => `/js/${f}`),
+    ...readdirSync(path.join(PUBLIC, 'fonts')).filter((f) => f.endsWith('.woff2')).map((f) => `/fonts/${f}`),
     '/icons/icon-192.png',
     '/icons/icon-512.png',
   ];
