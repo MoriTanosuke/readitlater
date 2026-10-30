@@ -75,6 +75,28 @@ async fn mime_typen_und_manifest() {
 }
 
 #[tokio::test]
+async fn webfont_wird_selbst_ausgeliefert() {
+    let app = common::setup(true).await;
+    for file in [
+        "/fonts/inter-latin-wght-normal.woff2",
+        "/fonts/inter-latin-ext-wght-normal.woff2",
+    ] {
+        let res = get(&app, file, None).await;
+        assert_eq!(res.status(), StatusCode::OK, "{file}");
+        assert_eq!(res.headers()[header::CONTENT_TYPE], "font/woff2", "{file}");
+        // Schriften kommen von der eigenen Origin: `default-src 'self'` genügt, es gibt keine
+        // eigene `font-src`-Ausnahme für fremde Server.
+        let csp = res.headers()[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(!csp.contains("font-src"), "{csp}");
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&body[..4], b"wOF2", "{file} ist keine WOFF2-Datei");
+    }
+}
+
+#[tokio::test]
 async fn etag_liefert_304() {
     let app = common::setup(true).await;
     let first = get(&app, "/style.css", None).await;
