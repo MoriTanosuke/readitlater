@@ -299,18 +299,23 @@
     <section id="view-reader" hidden>
       <!-- Schwebende Fassung des Links oben: erscheint erst, wenn der Link oben aus dem Bild gescrollt ist (js/backlink.js). -->
       <a href="#/" id="reader-back-float" class="back-bubble" hidden>← Zur Liste</a>
+      <!-- Kopfzeile und Bedienfeld stehen bewusst außerhalb der Lesespalte: deren Breite hängt an Schriftart,
+           -größe und -breite des Textes (ch). Hier gilt eine feste Breite in rem, damit sich beim Verstellen
+           nichts verschiebt, umbricht oder unter dem Zeiger wegläuft. -->
+      <div class="reader-chrome page-narrow">
+        <nav class="reader-nav">
+          <a href="#/" id="reader-back">← Zur Liste</a>
+          <div class="reader-actions">
+            <button type="button" id="reading-toggle" aria-expanded="false" aria-controls="reading-panel" aria-label="Darstellung anpassen" title="Darstellung anpassen">Aa</button>
+            <button type="button" id="hl-toggle" aria-pressed="false" hidden>Markierungen ausblenden</button>
+            <button type="button" id="reader-refresh-images" hidden>Bilder nachladen</button>
+            <button type="button" id="reader-toggle-read" hidden></button>
+            <button type="button" id="reader-delete" class="danger-btn" hidden>Löschen</button>
+          </div>
+        </nav>
+        <div id="reading-panel" class="reading-panel" role="group" aria-label="Darstellung" hidden></div>
+      </div>
       <div class="reading-scope">
-      <nav class="reader-nav">
-        <a href="#/" id="reader-back">← Zur Liste</a>
-        <div class="reader-actions">
-          <button type="button" id="reading-toggle" aria-expanded="false" aria-controls="reading-panel" aria-label="Darstellung anpassen" title="Darstellung anpassen">Aa</button>
-          <button type="button" id="hl-toggle" aria-pressed="false" hidden>Markierungen ausblenden</button>
-          <button type="button" id="reader-refresh-images" hidden>Bilder nachladen</button>
-          <button type="button" id="reader-toggle-read" hidden></button>
-          <button type="button" id="reader-delete" class="danger-btn" hidden>Löschen</button>
-        </div>
-      </nav>
-      <div id="reading-panel" class="reading-panel" role="group" aria-label="Darstellung" hidden></div>
       <article>
         <h1 id="reader-title"></h1>
         <p id="reader-meta" class="muted"></p>
