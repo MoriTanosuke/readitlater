@@ -20,6 +20,8 @@ const TIMEOUT_MS = 4000;
 
 // Wird beim Installieren vollständig geladen. Alles, was die Seite später nachlädt, kommt
 // zusätzlich beim ersten Abruf in den Cache; ein Test prüft, dass diese Liste vollständig ist.
+// Ausnahme: die Dateien der Leseschrift Literata (fonts/literata-*) stehen absichtlich nicht
+// hier, sie kommen erst in den Cache, wenn ein Benutzer „Serif“ wählt.
 const SHELL = [
   '/',
   '/style.css',

@@ -158,8 +158,8 @@ export function createPositionTracker({ root, save, now = () => Date.now() }) {
     if (session) session.interacted = true;
   }
 
-  // Bilder ohne feste Größe verschieben den Text beim Laden: Die gemerkte Stelle wird
-  // nachgeführt, solange der Benutzer noch nichts getan hat.
+  // Bilder ohne feste Größe und nachladende Webfonts (Literata, Inter) verschieben den Text:
+  // Die gemerkte Stelle wird nachgeführt, solange der Benutzer noch nichts getan hat.
   function onImageLoad() {
     if (!session || session.interacted || session.target <= 0 || frame !== null) return;
     frame = window.requestAnimationFrame(() => {
@@ -182,6 +182,7 @@ export function createPositionTracker({ root, save, now = () => Date.now() }) {
     window.addEventListener('scroll', onScroll, { passive: true });
     for (const name of INPUT_EVENTS) window.addEventListener(name, onInput, { passive: true, capture: true });
     root.addEventListener('load', onImageLoad, true);
+    document.fonts?.addEventListener?.('loadingdone', onImageLoad); // fehlt in älteren Umgebungen und jsdom
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onPageHide);
   }
@@ -190,6 +191,7 @@ export function createPositionTracker({ root, save, now = () => Date.now() }) {
     window.removeEventListener('scroll', onScroll);
     for (const name of INPUT_EVENTS) window.removeEventListener(name, onInput, true);
     root.removeEventListener('load', onImageLoad, true);
+    document.fonts?.removeEventListener?.('loadingdone', onImageLoad);
     document.removeEventListener('visibilitychange', onHide);
     window.removeEventListener('pagehide', onPageHide);
     clearTimeout(timer);
