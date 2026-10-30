@@ -319,13 +319,24 @@ a { color: var(--accent); }
   font-size: var(--reading-size);
   line-height: var(--reading-leading);
 }
-/* Bedienelemente behalten die Oberflächenschrift und -größe. */
-.reading-scope .reader-nav, .reading-scope .tags-form, .reading-scope .reading-panel {
+/* Bedienelemente in der Lesespalte (Schlagwörter, Link am Textende) behalten die Oberflächenschrift
+   und -größe. Kopfzeile und Bedienfeld oben stehen gar nicht in der Lesespalte (.reader-chrome). */
+.reading-scope .reader-nav, .reading-scope .tags-form {
   font-family: var(--ui-font);
   font-size: 1rem;
   line-height: 1.5;
 }
 #app:has(#view-reader:not([hidden])), #app:has(#view-display:not([hidden])) { max-width: none; }
+
+/* Kopfzeile und Bedienfeld im Lesemodus: feste Breite in rem (über .page-narrow), nie in ch. Die
+   Lesespalte wird mit Schriftart, -größe und -breite des Textes breiter oder schmaler; stünden
+   die Bedienelemente darin, wanderten sie beim Verstellen, die Knöpfe brächen um und der Regler
+   liefe unter dem Zeiger weg. Rem statt px, damit die Schriftgröße des Browsers weiter wirkt. */
+#reading-toggle { min-width: 2.75rem; }
+
+/* Wächst oder schrumpft der Text, erscheint oder verschwindet der Scrollbalken. Ohne reservierten
+   Platz änderte sich dabei die Fensterbreite, und die zentrierten Bedienelemente rutschten seitwärts. */
+html:has(#view-reader:not([hidden])), html:has(#view-display:not([hidden])) { scrollbar-gutter: stable; }
 
 /* Leseeinstellungen */
 .page-narrow { max-width: 40rem; margin-inline: auto; }
@@ -338,7 +349,8 @@ a { color: var(--accent); }
 }
 .reading-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.875rem 1.25rem; margin-bottom: 0.75rem; }
 .reading-head { display: flex; justify-content: space-between; gap: 0.5rem; }
-.reading-value { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Feste Breite für den Wert: „90 %“ und „100 %“ sollen nichts verschieben. */
+.reading-value { flex: none; min-width: 5.5rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .reading-field input[type="range"] { min-height: 2.75rem; padding: 0; accent-color: var(--accent); }
 .reading-sample { margin: 1.5rem auto; }
 .reading-sample h2 { font-size: 1.25em; margin: 0 0 0.5rem; }

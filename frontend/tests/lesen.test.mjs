@@ -1,6 +1,7 @@
 // Leseeinstellungen: Schriftart, Größe, Breite, Zeilenabstand, Farbschema und Kontrast.
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -121,6 +122,20 @@ test('Seite „Darstellung“ und Bedienfeld im Lesemodus', async (t) => {
 
   // Der Text sitzt in der Lesespalte, Bedienelemente nicht im Text
   assert.ok($('reader-content').closest('.reading-scope'));
+  // Kopfzeile und Bedienfeld stehen außerhalb der Lesespalte: deren Breite hängt in ch an Schriftart,
+  // -größe und -breite, sonst wanderten die Bedienelemente beim Verstellen (jsdom hat kein Layout,
+  // geprüft wird hier der Aufbau, siehe auch den Test zum Stylesheet).
+  for (const id of ['reader-back', 'reading-toggle', 'reading-panel']) {
+    assert.equal($(id).closest('.reading-scope'), null, `${id} steht nicht in der Lesespalte`);
+    assert.ok($(id).closest('.reader-chrome'), `${id} steht im Kopfbereich mit fester Breite`);
+  }
+  // Reihenfolge für Tastatur und Screenreader bleibt: Kopfzeile, Bedienfeld, Artikel
+  const order = [$('reader-back'), $('reading-toggle'), $('reading-panel'), $('reader-title')];
+  for (let i = 1; i < order.length; i += 1) {
+    assert.ok(order[i - 1].compareDocumentPosition(order[i]) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      `Lesereihenfolge: Element ${i} folgt auf Element ${i - 1}`);
+  }
+  ok('Kopfzeile und Bedienfeld stehen außerhalb der Lesespalte, Lesereihenfolge bleibt');
 
   // Escape schließt, Navigation schließt
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -152,6 +167,26 @@ test('Seite „Darstellung“ und Bedienfeld im Lesemodus', async (t) => {
   window.dispatchEvent(new window.StorageEvent('storage', { key: 'leseliste-reading' }));
   assert.deepEqual(reading.getSettings(), reading.DEFAULTS);
   ok('andere Tabs und kaputte Daten werden sicher verarbeitet');
+});
+
+test('Stylesheet: Kopfbereich und Bedienfeld hängen nicht an der Lesegröße', () => {
+  const css = readFileSync(path.join(PUBLIC, 'style.css'), 'utf8');
+  const rule = (start) => {
+    const from = css.indexOf(start);
+    assert.notEqual(from, -1, `${start} fehlt im Stylesheet`);
+    return css.slice(from, css.indexOf('}', from));
+  };
+  // Feste Breite in rem (folgt der Schriftgröße des Browsers), nie in ch oder an den Leseeinstellungen
+  const chrome = rule('.page-narrow {');
+  assert.match(chrome, /max-width:\s*40rem/);
+  assert.doesNotMatch(chrome, /\bch\b|--reading-/);
+  // Die Lesegröße wirkt nur an einer Stelle: in der Lesespalte
+  assert.equal((css.match(/var\(--reading-size\)/g) ?? []).length, 1);
+  assert.match(rule('.reading-scope {'), /font-size:\s*var\(--reading-size\)/);
+  // Kein Seitwärtsrutschen, wenn der Scrollbalken erscheint oder verschwindet
+  assert.match(css, /scrollbar-gutter:\s*stable/);
+  // Mindestgröße des Knopfs in rem (Zielgröße 44 px bei 16 px Basis, die Browser-Schriftgröße wirkt weiter)
+  assert.match(rule('#reading-toggle {'), /min-width:\s*2\.75rem/);
 });
 
 test('Sprache des Artikels steht als lang-Attribut im Lesemodus', async (t) => {
