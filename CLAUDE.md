@@ -15,6 +15,7 @@ Artikel per URL speichern, Volltext durchsuchen, mit Schlagwörtern versehen und
 ```sh
 cd backend
 cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test   # vor jedem Push
+cargo audit --deny warnings                                             # vor jedem Push, wie die Tests (einmalig: cargo install cargo-audit --locked)
 DATABASE_PATH=./data/app.db cargo run                                   # Backend lokal auf :3000
 
 # Frontend-Tests (echtes Frontend in jsdom gegen das gebaute Backend; Node 22)
@@ -31,6 +32,7 @@ Betreiber-Befehl (im Image gibt es keine Shell): `docker compose exec app /app/r
 ## Arbeitsweise
 
 - Änderungen immer auf einem Branch mit Pull Request, nie direkt auf `main`.
+- Vor jedem Push `cargo audit --deny warnings` ausführen, genauso verbindlich wie die Tests (siehe „Befehle“). Meldet es etwas, zuerst die Abhängigkeit aktualisieren; ist kein Fix verfügbar, nur mit Begründung in `backend/.cargo/audit.toml` ausnehmen (siehe „Abhängigkeiten und Audit“).
 - Schemaänderungen nur als neue Migration in `backend/migrations`, bestehende Migrationen nie verändern.
 - Neue Abhängigkeiten sparsam einführen und kurz begründen.
 - Antworten und Code-Kommentare auf Deutsch, Bezeichner auf Englisch.
