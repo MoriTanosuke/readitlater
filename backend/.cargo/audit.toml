@@ -18,4 +18,14 @@ ignore = [
   # Hauptversion von elliptic-curve, also bei webauthn-rs.
   # Neu bewerten: bei jeder neuen webauthn-rs-Version, spätestens bei stabiler 0.6.
   "RUSTSEC-2026-0387",
+
+  # libsqlite3-sys 0.37.0 (gebündeltes SQLite vor 3.54.0), CVE-2026-119375: Informations-
+  # preisgabe (nicht initialisierter Seiten-Cache), wenn SQLite eine präparierte WAL-Datei
+  # mit zu kleiner Seitengröße verarbeitet. Voraussetzung ist eine vom Angreifer gelieferte
+  # Datenbank- bzw. WAL-Datei. Die App öffnet nur ihre eigene Datei im Volume `/data`, nie
+  # eine hochgeladene oder importierte (der Import liest JSON, keine SQLite-Dateien).
+  # Ein Update ist derzeit nicht möglich: sqlx-sqlite 0.9.0 (neueste sqlx-Version) erlaubt
+  # nur libsqlite3-sys >=0.30.1, <0.38.0, behoben ist es erst ab 0.39.0.
+  # Neu bewerten: bei jeder neuen sqlx-Version (Dependabot), dann Ausnahme entfernen.
+  "RUSTSEC-2026-0459",
 ]
