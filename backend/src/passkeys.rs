@@ -30,8 +30,8 @@ use axum_extra::extract::cookie::CookieJar;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use webauthn_rs::prelude::{
-    CredentialID, DiscoverableAuthentication, DiscoverableKey, Passkey, PasskeyRegistration,
-    PublicKeyCredential, RegisterPublicKeyCredential, Url, Uuid, Webauthn, WebauthnBuilder,
+    CredentialID, DiscoverableAuthentication, Passkey, PasskeyRegistration, PublicKeyCredential,
+    RegisterPublicKeyCredential, Url, Uuid, Webauthn, WebauthnBuilder,
 };
 
 use crate::{
@@ -424,7 +424,7 @@ pub async fn login_finish(
         .pending()
         .take_login(&body.id)
         .ok_or(ApiError::BadPasskey)?;
-    let (user_handle, _) = service
+    let (user_handle, cred_id) = service
         .webauthn
         .identify_discoverable_authentication(&body.credential)
         .map_err(|_| ApiError::BadPasskey)?;
@@ -448,22 +448,19 @@ pub async fn login_finish(
     if entries.is_empty() {
         return Err(ApiError::BadPasskey);
     }
-    let candidates: Vec<DiscoverableKey> = entries
-        .iter()
-        .map(|entry| DiscoverableKey::from(&entry.passkey))
-        .collect();
+    // Die Kennung des benutzten Passkeys steht schon in der Antwort des Browsers, geprüft wird
+    // nur der passende (finish_discoverable_authentication_v2 nimmt einen einzelnen Passkey).
+    let entry = entries
+        .iter_mut()
+        .find(|entry| entry.passkey.cred_id().as_slice() == cred_id)
+        .ok_or(ApiError::BadPasskey)?;
     let result = service
         .webauthn
-        .finish_discoverable_authentication(&body.credential, authentication, &candidates)
+        .finish_discoverable_authentication_v2(&body.credential, authentication, &entry.passkey)
         .map_err(|e| {
             tracing::info!("Anmeldung mit Passkey abgelehnt: {e}");
             ApiError::BadPasskey
         })?;
-
-    let entry = entries
-        .iter_mut()
-        .find(|entry| entry.passkey.cred_id() == result.cred_id())
-        .ok_or(ApiError::BadPasskey)?;
     // Den Zähler nachführen, damit ein geklonter Passkey auffällt.
     let changed = entry.passkey.update_credential(&result) == Some(true);
     if changed {
