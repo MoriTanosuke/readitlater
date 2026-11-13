@@ -94,7 +94,8 @@ export const api = {
     if (filter.tag) params.set('tag', filter.tag);
     return request('GET', `/articles?${params}`);
   },
-  listTags: () => request('GET', '/tags'),
+  /** read ('true' | 'false' | ''): nur Artikel mit diesem Gelesen-Status zählen */
+  listTags: (read = '') => request('GET', read ? `/tags?${new URLSearchParams({ read })}` : '/tags'),
   /** changes: { is_read?, tags?, read_pos? }; options: { keepalive } */
   updateArticle: (id, changes, { keepalive = false } = {}) =>
     request('PATCH', `/articles/${encodeURIComponent(id)}`, changes, false, TIMEOUT_MS, keepalive),

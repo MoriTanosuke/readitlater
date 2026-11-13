@@ -305,6 +305,19 @@ async fn schlagwoerter_setzen_filtern_und_aufraeumen() {
         json!([{ "name": "Rust", "count": 2 }, { "name": "web dev", "count": 1 }])
     );
 
+    // Mit `read` zählen nur Artikel mit diesem Status, leere Schlagwörter entfallen.
+    let reply = patch(&app, &cookie, zwei, json!({ "is_read": true })).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let unread = get(&app, "/api/tags?read=false", Some(&cookie)).await;
+    assert_eq!(
+        unread.body,
+        json!([{ "name": "Rust", "count": 1 }, { "name": "web dev", "count": 1 }])
+    );
+    let read = get(&app, "/api/tags?read=true", Some(&cookie)).await;
+    assert_eq!(read.body, json!([{ "name": "Rust", "count": 1 }]));
+    let reply = patch(&app, &cookie, zwei, json!({ "is_read": false })).await;
+    assert_eq!(reply.status, StatusCode::OK);
+
     // Ersetzen entfernt nicht mehr genutzte Schlagwörter, andere Felder bleiben unberührt.
     let reply = patch(&app, &cookie, eins, json!({ "tags": [] })).await;
     assert_eq!(reply.body["tags"], json!([]));
