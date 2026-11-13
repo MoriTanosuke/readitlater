@@ -294,9 +294,10 @@ export async function list(filter = {}) {
 }
 
 /** Schlagwörter mit Anzahl über die gespeicherten Artikel. */
-export async function tagCounts() {
+export async function tagCounts(read = '') {
   const counts = new Map();
   for (const article of await allArticles()) {
+    if (read !== '' && article.is_read !== (read === 'true')) continue;
     for (const tag of article.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
   }
   return [...counts].map(([name, n]) => ({ name, count: n })).sort((a, b) => a.name.localeCompare(b.name));

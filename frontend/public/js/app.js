@@ -701,7 +701,7 @@ async function showStoredList(token) {
   listLoaded = false; // beim nächsten Besuch wieder beim Server nachfragen
   renderList();
   if (tagsStale || tags.length === 0) {
-    tags = await offline.tagCounts();
+    tags = await offline.tagCounts(filter.read);
     renderTags();
   }
   return true;
@@ -725,9 +725,10 @@ function scheduleSync(force = false) {
 
 async function loadTags() {
   try {
-    tags = await api.listTags();
+    tags = await api.listTags(filter.read);
     tagsStale = false;
-    // Ein Schlagwort, das es nicht mehr gibt, bleibt nicht als Filter hängen.
+    // Ein Schlagwort ohne Treffer (gelöscht oder im gewählten Gelesen-Status leer) bleibt nicht
+    // als Filter hängen, sonst stünde dort eine leere Liste.
     if (filter.tag && !tags.some((t) => t.name.toLowerCase() === filter.tag.toLowerCase())) {
       filter.tag = '';
       loadArticles(true);
@@ -736,7 +737,7 @@ async function loadTags() {
   } catch (error) {
     if (handleAuthError(error)) return;
     if (isUnreachable(error)) {
-      tags = await offline.tagCounts(); // ohne Verbindung: Schlagwörter der gespeicherten Artikel
+      tags = await offline.tagCounts(filter.read); // ohne Verbindung: Schlagwörter der gespeicherten Artikel
       renderTags();
     }
     // andere Fehler: die Liste funktioniert auch ohne Leiste
@@ -791,6 +792,7 @@ $('filter-q').addEventListener('input', () => {
 $('filter-read').addEventListener('change', () => {
   filter.read = $('filter-read').value;
   saveReadFilter(filter.read);
+  loadTags(); // die Schlagwörter zählen nur Artikel mit diesem Gelesen-Status
   applyFilter();
 });
 
@@ -883,6 +885,8 @@ function mergeUpdated(updated) {
 async function toggleRead(article, button) {
   try {
     await withBusy(button, () => setRead(article, !article.is_read));
+    tagsStale = true;
+    loadTags();
     renderList();
   } catch (error) {
     if (handleAuthError(error)) return;

@@ -111,6 +111,26 @@ test('Suche, Gelesen-Status und Schlagwörter', async (t) => {
   await until(() => titles().length === 2, 'Schlagwortfilter aus');
   ok('Schlagwortleiste filtert und zeigt Schlagwörter in der Liste');
 
+  // Gelesen-Filter: die Leiste zeigt nur Schlagwörter der angezeigten Artikel. Der
+  // beschlagwortete Artikel ist gelesen, unter „Ungelesen“ gibt es also keine Schlagwörter.
+  const setRead = (value) => {
+    $('filter-read').value = value;
+    $('filter-read').dispatchEvent(new window.Event('change'));
+  };
+  setRead('false');
+  await until(() => $('tag-bar').hidden, 'Leiste unter „Ungelesen“ leer');
+  setRead('true');
+  await until(() => !$('tag-bar').hidden, 'Leiste unter „Gelesen“ gefüllt');
+  assert.deepEqual([...document.querySelectorAll('#tag-bar .tag-chip')].map((c) => c.firstChild.textContent), ['Rust', 'web dev']);
+  document.querySelector('#tag-bar .tag-chip').click();
+  await until(() => titles().length === 1, 'Schlagwortfilter unter „Gelesen“');
+  setRead('false'); // Schlagwort ohne Treffer: Filter fällt weg, keine leere Liste
+  await until(() => $('tag-bar').hidden && titles().length === 1, 'Schlagwortfilter zurückgesetzt');
+  assert.deepEqual(titles(), ['Kaffee und Bohnen']);
+  setRead('');
+  await until(() => !$('tag-bar').hidden && titles().length === 2, 'Alle Artikel, Leiste wieder da');
+  ok('Schlagwortleiste folgt dem Gelesen-Filter');
+
   // Letzten Artikel mit Schlagwörtern löschen: Leiste verschwindet
   items().find((li) => li.querySelector('.article-title').textContent === 'E2E Testartikel')
     .querySelector('.delete').click();

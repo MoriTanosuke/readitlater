@@ -1,7 +1,10 @@
 //! Schlagwörter: Eingaben prüfen, einem Artikel zuordnen und auflisten.
 
-use axum::{Json, extract::State};
-use serde::Serialize;
+use axum::{
+    Json,
+    extract::{Query, State},
+};
+use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 
 use crate::{AppState, auth::AuthUser, error::ApiError};
@@ -15,17 +18,29 @@ pub struct TagCount {
     count: i64,
 }
 
-/// `GET /api/tags`: eigene Schlagwörter mit Anzahl der Artikel, alphabetisch.
+#[derive(Deserialize)]
+pub struct ListParams {
+    /// `true` = nur gelesene, `false` = nur ungelesene Artikel zählen.
+    read: Option<bool>,
+}
+
+/// `GET /api/tags`: eigene Schlagwörter mit Anzahl der Artikel, alphabetisch. Mit `read`
+/// zählen nur Artikel mit diesem Gelesen-Status; Schlagwörter ohne Treffer entfallen.
 pub async fn list(
     State(state): State<AppState>,
     user: AuthUser,
+    Query(params): Query<ListParams>,
 ) -> Result<Json<Vec<TagCount>>, ApiError> {
     let tags = sqlx::query_as::<_, TagCount>(
         "SELECT t.name AS name, COUNT(at.article_id) AS count \
-         FROM tags t JOIN article_tags at ON at.tag_id = t.id \
-         WHERE t.user_id = ? GROUP BY t.id ORDER BY t.name",
+         FROM tags t \
+         JOIN article_tags at ON at.tag_id = t.id \
+         JOIN articles a ON a.id = at.article_id \
+         WHERE t.user_id = ?1 AND (?2 IS NULL OR a.is_read = ?2) \
+         GROUP BY t.id ORDER BY t.name",
     )
     .bind(user.id)
+    .bind(params.read)
     .fetch_all(&state.pool)
     .await?;
     Ok(Json(tags))
