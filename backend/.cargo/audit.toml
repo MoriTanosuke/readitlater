@@ -28,4 +28,13 @@ ignore = [
   # nur libsqlite3-sys >=0.30.1, <0.38.0, behoben ist es erst ab 0.39.0.
   # Neu bewerten: bei jeder neuen sqlx-Version (Dependabot), dann Ausnahme entfernen.
   "RUSTSEC-2026-0459",
+
+  # chrono 0.4.45, nicht mehr gepflegt (Warnung „unmaintained“, keine Sicherheitslücke).
+  # Steht nur in Cargo.lock als optionale Abhängigkeit von serde_with (über webauthn-rs).
+  # Das Feature `chrono_0_4` ist nicht aktiv, chrono wird also nicht kompiliert:
+  # `cargo tree -i chrono --target all` meldet „nothing to print“. cargo audit liest aber
+  # die ganze Lock-Datei. Es gibt keine korrigierte Version.
+  # Neu bewerten: wenn `cargo tree -i chrono --target all` etwas ausgibt (dann wäre
+  # chrono wirklich eingebaut) oder serde_with/webauthn-rs chrono nicht mehr führen.
+  "RUSTSEC-2026-0543",
 ]
