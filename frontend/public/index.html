@@ -84,6 +84,8 @@
       </form>
       <p id="add-status" class="muted" role="status" hidden></p>
       <p id="add-error" class="error" role="alert" hidden></p>
+      <p class="hint add-manual-hint">Seite lässt sich nicht laden (Anmeldung, Bezahlschranke)?
+        <a id="link-manual" href="#/add">Von Hand einfügen</a></p>
 
       <form id="form-filter" class="filter" role="search">
         <label class="visually-hidden" for="filter-q">Artikel durchsuchen</label>
@@ -101,6 +103,36 @@
       <p id="list-empty" class="empty" hidden>Noch keine Artikel. Füge oben eine Adresse ein.</p>
       <p id="list-error" class="error" role="alert" hidden></p>
       <button type="button" id="btn-more" class="wide" hidden>Mehr laden</button>
+    </section>
+
+    <section id="view-manual" hidden>
+      <h1>Artikel von Hand hinzufügen</h1>
+      <p>Für Seiten, die die App nicht selbst abrufen kann: Gib die Adresse an und füge den Text
+        der Seite ein. Es wird nichts aus dem Internet geladen, der Artikel erscheint danach
+        wie jeder andere in deiner Liste (mit Suche, Schlagwörtern und Markierungen).</p>
+      <form id="form-manual">
+        <label>Adresse
+          <input type="text" name="url" inputmode="url" autocapitalize="off" autocomplete="off"
+                 spellcheck="false" placeholder="https://…" required>
+        </label>
+        <label>Titel (optional)
+          <input type="text" name="title" maxlength="300" autocomplete="off"
+                 placeholder="Ohne Angabe gilt der Name der Webseite">
+        </label>
+        <label>Volltext
+          <textarea name="content" rows="14" required
+                    placeholder="Text der Seite hier einfügen. Jede Zeile wird ein Absatz."></textarea>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="html">
+          Das ist der Quelltext der Seite (HTML), den Artikeltext daraus herausziehen
+        </label>
+        <p id="manual-error" class="error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button type="submit" class="primary">Speichern</button>
+          <a href="#/" class="button-link">Abbrechen</a>
+        </div>
+      </form>
     </section>
 
     <section id="view-offline" hidden>

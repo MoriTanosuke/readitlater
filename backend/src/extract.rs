@@ -166,6 +166,47 @@ pub fn extract(html: &str, url: &Url) -> Result<Extracted, ExtractError> {
     })
 }
 
+/// Baut einen Artikel aus von Hand eingefügtem Klartext (Absatzgrenze = Zeilenumbruch).
+/// Der Text wird nie als HTML gelesen: Er wird maskiert und in `<p>` gesetzt, danach läuft
+/// trotzdem `sanitize` (zusätzliche Absicherung). Ohne Titel gilt der Host der Adresse.
+pub fn from_plain_text(
+    title: Option<&str>,
+    text: &str,
+    url: &Url,
+) -> Result<Extracted, ExtractError> {
+    let paragraphs: Vec<String> = text
+        .lines()
+        .map(collapse_whitespace)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let content_text = paragraphs.join(" ");
+    if content_text.chars().count() < MIN_TEXT_CHARS {
+        return Err(ExtractError::NoContent);
+    }
+    let escaped: String = paragraphs
+        .iter()
+        .map(|p| {
+            let p = p
+                .replace('&', "&amp;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;");
+            format!("<p>{p}</p>")
+        })
+        .collect();
+    let title = title
+        .map(collapse_whitespace)
+        .filter(|t| !t.is_empty())
+        .map(|t| truncate_chars(&t, MAX_TITLE_CHARS))
+        .unwrap_or_else(|| url.host_str().unwrap_or("Ohne Titel").to_owned());
+    Ok(Extracted {
+        lang: detect_language(&content_text),
+        title,
+        content_html: sanitize(&escaped),
+        excerpt: truncate_chars(&content_text, MAX_EXCERPT_CHARS),
+        content_text,
+    })
+}
+
 /// Höchstens so viele Zeichen des Textes werden zur Spracherkennung verwendet.
 const LANG_SAMPLE_CHARS: usize = 4000;
 

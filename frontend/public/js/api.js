@@ -101,6 +101,8 @@ export const api = {
     request('PATCH', `/articles/${encodeURIComponent(id)}`, changes, false, TIMEOUT_MS, keepalive),
   // Der Server lädt die Seite selbst, das dauert länger als eine normale Anfrage.
   addArticle: (url) => request('POST', '/articles', { url }, false, 60_000),
+  /** Artikel von Hand anlegen: { url, title?, content, html? }. Der Server ruft nichts ab. */
+  addManualArticle: (article) => request('POST', '/articles/manual', article, false, 60_000),
   getArticle: (id) => request('GET', `/articles/${encodeURIComponent(id)}`),
   deleteArticle: (id) => request('DELETE', `/articles/${encodeURIComponent(id)}`),
   /** Bilder des Artikels (erneut) lokal ablegen lassen; die Antwort nennt die Zahl offener Bilder. */

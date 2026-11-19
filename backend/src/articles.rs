@@ -30,6 +30,8 @@ const MAX_QUERY_WORDS: usize = 10;
 /// Obergrenze für die Leseposition. Der Server kennt die Textlänge des dargestellten Artikels
 /// nicht (Import erlaubt bis zu 4 MiB je Artikel), die Grenze fängt nur Unsinn ab.
 const MAX_READ_POS: i64 = 10_000_000;
+/// Höchstgröße des von Hand eingefügten Inhalts (wie das Abruflimit `FETCH_MAX_BYTES`).
+pub const MAX_MANUAL_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Deserialize)]
 pub struct NewArticle {
@@ -217,13 +219,93 @@ pub async fn save_article(
         .map_err(ApiError::internal)?
         .map_err(extract_error)?;
 
+    store_article(state, user_id, &url, &extracted).await
+}
+
+/// Eingabe für `POST /api/articles/manual`: Adresse und Inhalt kommen vom Benutzer, es wird
+/// nichts abgerufen.
+#[derive(Deserialize)]
+pub struct ManualArticle {
+    url: String,
+    /// Optional; ohne Titel gilt bei Klartext der Host der Adresse.
+    title: Option<String>,
+    /// Klartext (jede Zeile ein Absatz) oder, mit `html: true`, der Quelltext der Seite.
+    content: String,
+    #[serde(default)]
+    html: bool,
+}
+
+/// `POST /api/articles/manual`: Artikel per Hand anlegen (Adresse plus Volltext).
+///
+/// Für Seiten, die sich nicht abrufen lassen (Anmeldung, Bezahlschranke, Bot-Schutz). Die
+/// Adresse wird nur geprüft und gespeichert, nie abgerufen (kein SSRF). Klartext wird
+/// maskiert; HTML läuft durch dieselbe Extraktion wie ein abgerufener Artikel (Readability und
+/// `ammonia`). Nur bei HTML zählt der Aufruf für `fetch_user`, weil dann Bilder nachgeladen
+/// werden können.
+pub async fn create_manual(
+    State(state): State<AppState>,
+    user: AuthUser,
+    ApiJson(body): ApiJson<ManualArticle>,
+) -> Result<(StatusCode, Json<ArticleSummary>), ApiError> {
+    if body.content.len() > MAX_MANUAL_BYTES {
+        return Err(ApiError::Unprocessable(
+            "Der Text ist zu groß zum Speichern".into(),
+        ));
+    }
+    let url = parse_url(&body.url)?;
+    state.fetcher.validate(&url).map_err(fetch_error)?;
+
+    let existing: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM articles WHERE user_id = ? AND url = ?")
+            .bind(user.id)
+            .bind(url.as_str())
+            .fetch_optional(&state.pool)
+            .await?;
+    if existing.is_some() {
+        return Err(already_saved());
+    }
+    if body.html {
+        state.limits.check_fetch(user.id)?;
+    }
+
+    let page_url = url.clone();
+    let (title, content, is_html) = (body.title, body.content, body.html);
+    let extracted = tokio::task::spawn_blocking(move || {
+        if is_html {
+            extract::extract(&content, &page_url).map(|mut e| {
+                // Ein von Hand gesetzter Titel hat Vorrang vor dem der Seite.
+                if let Some(t) = title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+                    e.title = t.chars().take(300).collect();
+                }
+                e
+            })
+        } else {
+            extract::from_plain_text(title.as_deref(), &content, &page_url)
+        }
+    })
+    .await
+    .map_err(ApiError::internal)?
+    .map_err(extract_error)?;
+
+    let summary = store_article(&state, user.id, &url, &extracted).await?;
+    Ok((StatusCode::CREATED, Json(summary)))
+}
+
+/// Legt den extrahierten Artikel an und reiht seine Bilder ein. Gemeinsam für Abruf und
+/// manuelles Anlegen.
+async fn store_article(
+    state: &AppState,
+    user_id: i64,
+    url: &Url,
+    extracted: &extract::Extracted,
+) -> Result<ArticleSummary, ApiError> {
     let inserted = sqlx::query_as::<_, SummaryRow>(
         "INSERT INTO articles (user_id, url, title, content, content_text, excerpt, lang) \
          VALUES (?, ?, ?, ?, ?, ?, ?) \
          RETURNING id, url, title, excerpt, NULL AS snippet, is_read, created_at, '[]' AS tags, 0 AS image_count",
     )
     .bind(user_id)
-    .bind(&normalized)
+    .bind(url.as_str())
     .bind(&extracted.title)
     .bind(&extracted.content_html)
     .bind(&extracted.content_text)
@@ -236,7 +318,7 @@ pub async fn save_article(
         Ok(row) => {
             // Bilder im Hintergrund holen; der Artikel ist auch ohne sie vollständig.
             if state.config.image_store_enabled
-                && let Err(e) = images::enqueue(state, row.id, &extracted.content_html, &url).await
+                && let Err(e) = images::enqueue(state, row.id, &extracted.content_html, url).await
             {
                 tracing::warn!("Bilder von Artikel {} nicht eingereiht: {e}", row.id);
             }

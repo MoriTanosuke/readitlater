@@ -108,6 +108,13 @@ pub fn app(state: AppState) -> Router {
         )
         .merge(password_routes)
         .route("/articles", post(articles::create).get(articles::list))
+        // Eigenes Limit für den eingefügten Inhalt (überschreibt das allgemeine, wie beim Import).
+        .route(
+            "/articles/manual",
+            post(articles::create_manual).layer(DefaultBodyLimit::max(
+                articles::MAX_MANUAL_BYTES + 64 * 1024,
+            )),
+        )
         .route(
             "/articles/{id}",
             get(articles::show)

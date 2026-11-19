@@ -541,3 +541,164 @@ async fn ungueltige_adressen_werden_abgelehnt() {
     );
     assert_eq!(count(&app.pool, "articles").await, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Manuelles Anlegen (Adresse plus Volltext von Hand)
+// ---------------------------------------------------------------------------
+
+const LANGER_TEXT: &str = "Dies ist der erste Absatz mit <b>spitzen</b> Klammern & Zeichen.\n\n\
+    Und hier steht ein zweiter Absatz, der lang genug ist, damit der Text als Artikel gilt.";
+
+async fn add_manual(app: &TestApp, cookie: &str, body: serde_json::Value) -> Reply {
+    post(app, "/api/articles/manual", body, Some(cookie)).await
+}
+
+#[tokio::test]
+async fn manuell_klartext_wird_maskiert_und_ohne_abruf_gespeichert() {
+    // Strenger Modus ohne Testserver: Die Adresse darf nie abgerufen werden.
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+
+    let reply = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "https://example.org/bezahlt", "title": " Mein Titel ", "content": LANGER_TEXT }),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.error());
+    assert_eq!(reply.body["title"], "Mein Titel");
+    assert_eq!(reply.body["url"], "https://example.org/bezahlt");
+    assert_eq!(reply.body["is_read"], false);
+    let id = reply.body["id"].as_i64().unwrap();
+
+    let full = get(&app, &format!("/api/articles/{id}"), Some(&cookie)).await;
+    let content = full.body["content"].as_str().unwrap();
+    assert!(content.contains("<p>"), "{content}");
+    assert!(
+        !content.contains("<b>"),
+        "Text darf nie als HTML gelten: {content}"
+    );
+    assert!(content.contains("&lt;b&gt;spitzen&lt;/b&gt;"), "{content}");
+    assert!(content.contains("&amp; Zeichen"), "{content}");
+
+    // Der Text ist durchsuchbar.
+    let found = get(&app, "/api/articles?q=zweiter", Some(&cookie)).await;
+    assert_eq!(found.body.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn manuell_ohne_titel_gilt_der_host() {
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+    let reply = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "example.org/x", "content": LANGER_TEXT }),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.error());
+    assert_eq!(reply.body["title"], "example.org");
+    assert_eq!(reply.body["url"], "https://example.org/x");
+}
+
+#[tokio::test]
+async fn manuell_html_laeuft_durch_extraktion_und_bereinigung() {
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+    let reply = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "https://example.org/seite", "html": true, "content": article_page("Aus dem Quelltext") }),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.error());
+    assert_eq!(reply.body["title"], "Aus dem Quelltext");
+    let id = reply.body["id"].as_i64().unwrap();
+    let full = get(&app, &format!("/api/articles/{id}"), Some(&cookie)).await;
+    let content = full.body["content"].as_str().unwrap().to_lowercase();
+    for verboten in ["<script", "onclick", "onerror", "javascript:"] {
+        assert!(!content.contains(verboten), "{verboten} in {content}");
+    }
+    assert!(content.contains("ausführlicher absatz"));
+}
+
+#[tokio::test]
+async fn manuell_duplikate_zu_kurze_texte_und_falsche_adressen() {
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+    let body = json!({ "url": "https://example.org/a#teil", "content": LANGER_TEXT });
+    assert_eq!(
+        add_manual(&app, &cookie, body.clone()).await.status,
+        StatusCode::CREATED
+    );
+    // Dieselbe Adresse (Fragment zählt nicht), auch über den Abrufweg.
+    assert_eq!(
+        add_manual(&app, &cookie, body).await.status,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        add(&app, &cookie, "https://example.org/a").await.status,
+        StatusCode::CONFLICT
+    );
+
+    let kurz = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "https://example.org/b", "content": "zu kurz" }),
+    )
+    .await;
+    assert_eq!(kurz.status, StatusCode::UNPROCESSABLE_ENTITY);
+    for url in [
+        "ftp://example.org/c",
+        "https://nutzer:pw@example.org/c",
+        "http://127.0.0.1/c",
+    ] {
+        let r = add_manual(&app, &cookie, json!({ "url": url, "content": LANGER_TEXT })).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{url}: {}", r.error());
+    }
+    assert_eq!(count(&app.pool, "articles").await, 1);
+}
+
+#[tokio::test]
+async fn manuell_ist_pro_benutzer_getrennt_und_braucht_anmeldung() {
+    let app = setup(true).await;
+    let anna = register_cookie(&app, "anna@example.com").await;
+    let ben = register_cookie(&app, "ben@example.com").await;
+    let body = json!({ "url": "https://example.org/a", "content": LANGER_TEXT });
+    assert_eq!(
+        add_manual(&app, &anna, body.clone()).await.status,
+        StatusCode::CREATED
+    );
+    // Ben darf dieselbe Adresse unabhängig speichern.
+    assert_eq!(
+        add_manual(&app, &ben, body.clone()).await.status,
+        StatusCode::CREATED
+    );
+    let ohne = post(&app, "/api/articles/manual", body, None).await;
+    assert_eq!(ohne.status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn manuell_zu_grosser_inhalt_wird_abgelehnt() {
+    let app = setup(true).await;
+    let cookie = register_cookie(&app, "anna@example.com").await;
+    // Knapp über 2 MiB: passt noch in den Body, überschreitet aber die Inhaltsgrenze.
+    let knapp = "wort ".repeat(420_000);
+    let r = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "https://example.org/g", "content": knapp }),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", r.error());
+    // Weit darüber stoppt schon das Body-Limit der Route.
+    let gross = "wort ".repeat(1_000_000);
+    let r = add_manual(
+        &app,
+        &cookie,
+        json!({ "url": "https://example.org/h", "content": gross }),
+    )
+    .await;
+    assert!(r.status.is_client_error(), "{:?}", r.status);
+    assert_eq!(count(&app.pool, "articles").await, 0);
+}
