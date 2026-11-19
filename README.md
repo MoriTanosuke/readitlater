@@ -118,6 +118,10 @@ Die Leseliste lässt sich wie eine App installieren („Zum Startbildschirm hinz
 - Die Artikel liegen nur in diesem Browser. Beim Abmelden werden sie vom Gerät gelöscht. Abmelden geht deshalb nur mit Verbindung.
 - Android: In der installierten App erscheint die Leseliste im Teilen-Menü anderer Apps. Das Teilen speichert den Artikel nach der Anmeldung. iPhone und iPad unterstützen das nicht, dort bleibt der Kurzbefehl (siehe oben).
 
+## Artikel von Hand hinzufügen
+
+Lässt sich eine Seite nicht abrufen (Anmeldung, Bezahlschranke, Bot-Schutz), gibt es unter dem Adressfeld den Link „Von Hand einfügen“. Dort gibst du die Adresse und den Text der Seite an (optional einen Titel). Jede Zeile wird ein Absatz. Wer den Quelltext der Seite einfügt, setzt das Häkchen „Quelltext (HTML)“, dann wird der Artikeltext wie bei einem abgerufenen Artikel herausgezogen. Es wird nichts aus dem Internet geladen. Der Artikel verhält sich danach wie jeder andere (Suche, Schlagwörter, Markierungen, Export). Höchstens 2 MiB.
+
 ## Export und Import
 
 Im Konto-Menü unter „Export und Import“ lädt ein Klick auf „Alle Artikel herunterladen“ eine einzelne JSON-Datei mit den eigenen Artikeln (Adresse, Titel, Inhalt, Schlagwörter, Gelesen-Status). Es braucht nur den Browser, keine Entpackprogramme. Die Datei enthält keine Kontodaten.

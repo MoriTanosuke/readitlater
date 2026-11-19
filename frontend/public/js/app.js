@@ -9,7 +9,7 @@ import { applyLocalImages, renderSafeHtml, safeUrl } from './safe-html.js';
 
 const $ = (id) => document.getElementById(id);
 const READ_FILTER_KEY = 'leseliste-read-filter';
-const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'passkeys', 'delete', 'share', 'data', 'offline', 'display'];
+const VIEWS = ['loading', 'auth', 'home', 'reader', 'password', 'passkeys', 'delete', 'share', 'data', 'offline', 'display', 'manual'];
 const PAGE_SIZE = 50;
 const APP_TITLE = 'Leseliste';
 const SLOW_MS = 2500; // so lange wartet die Liste auf den Server, bevor gespeicherte Artikel erscheinen
@@ -323,6 +323,47 @@ function backToList(notice = '') {
   location.replace('#/');
 }
 
+// Artikel von Hand hinzufügen (#/add)
+
+function openManualPage() {
+  const typed = $('add-url').value.trim(); // schon eingegebene Adresse übernehmen
+  openAccountPage('manual', 'Artikel von Hand hinzufügen');
+  const form = $('form-manual');
+  if (typed) {
+    form.elements.url.value = typed;
+    form.elements.content.focus();
+  }
+}
+
+$('form-manual').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  clearError($('manual-error'));
+  const body = {
+    url: form.elements.url.value.trim(),
+    content: form.elements.content.value,
+    html: form.elements.html.checked,
+  };
+  const title = form.elements.title.value.trim();
+  if (title) body.title = title;
+  try {
+    await withBusy(form.querySelector('button[type="submit"]'), () => api.addManualArticle(body));
+    $('add-url').value = '';
+    // Suche und Schlagwort passen vielleicht nicht zum neuen Artikel: zurücksetzen, die
+    // Auswahl Alle/Ungelesen/Gelesen bleibt. Die Liste wird neu geladen.
+    filter = { q: '', read: filter.read, tag: '' };
+    listLoaded = false;
+    tagsStale = true;
+    backToList(
+      filter.read === 'true'
+        ? 'Artikel gespeichert. Er ist ungelesen und steht unter „Alle“ oder „Ungelesen“.'
+        : 'Artikel gespeichert.',
+    );
+  } catch (error) {
+    if (!handleAuthError(error)) showError($('manual-error'), error.message);
+  }
+});
+
 // Export und Import (#/account/data)
 
 const MAX_IMPORT_BYTES = 64 * 1024 * 1024; // wie im Backend
@@ -625,6 +666,7 @@ function route() {
   closeMenu();
   const match = /^#\/article\/(\d+)$/.exec(location.hash);
   if (match) openReader(Number(match[1]));
+  else if (location.hash === '#/add') openManualPage();
   else if (location.hash === '#/account/share') openSharePage();
   else if (location.hash === '#/account/data') openDataPage();
   else if (location.hash === '#/account/display') openDisplayPage();
