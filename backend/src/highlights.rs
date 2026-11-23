@@ -182,7 +182,10 @@ pub async fn create(
     ApiJson(input): ApiJson<HighlightInput>,
 ) -> Result<(StatusCode, Json<Highlight>), ApiError> {
     let clean = validate(input)?;
-    let mut tx = state.pool.begin().await?;
+    // Lesen und danach Schreiben in einer Transaktion: sofort als Schreiber beginnen. Eine
+    // aufgeschobene Transaktion scheitert im WAL-Modus sofort mit "database is locked" (ohne
+    // busy_timeout abzuwarten), wenn zwischen Lesen und Schreiben ein anderer Schreiber committet.
+    let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     let owned: Option<i64> =
         sqlx::query_scalar("SELECT id FROM articles WHERE id = ? AND user_id = ?")
             .bind(article_id)

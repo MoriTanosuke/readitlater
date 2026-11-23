@@ -64,7 +64,10 @@ pub async fn reset_credentials(
     let hash = auth::hash_password(&options.new_password)
         .map_err(|_| ResetError::Database("Passwort konnte nicht verarbeitet werden".into()))?;
 
-    let mut tx = pool.begin().await?;
+    // Lesen und danach Schreiben in einer Transaktion: sofort als Schreiber beginnen. Eine
+    // aufgeschobene Transaktion scheitert im WAL-Modus sofort mit "database is locked" (ohne
+    // busy_timeout abzuwarten), wenn zwischen Lesen und Schreiben ein anderer Schreiber committet.
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let user_id: i64 = sqlx::query_scalar("SELECT id FROM users WHERE email = ?")
         .bind(options.email.trim().to_lowercase())
         .fetch_optional(&mut *tx)
