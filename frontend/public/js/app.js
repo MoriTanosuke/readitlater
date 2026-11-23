@@ -27,6 +27,7 @@ let tagsStale = true;
 let pendingNotice = ''; // einmalige Meldung für die Liste (z. B. nach Passwortänderung)
 let readerArticle = null;
 let routeToken = 0; // verwirft veraltete Antworten bei schnellem Navigieren
+let listScroll = null; // Scrollstand der Liste, solange eine andere Ansicht offen ist
 let offlineView = false; // zeigt die App gerade gespeicherte statt aktuelle Daten?
 let lastSync = 0; // Zeitpunkt (ms) des letzten Abgleichs mit dem Server
 let serverPasskeys = false; // hat der Server Passkeys eingerichtet?
@@ -47,6 +48,9 @@ const backBubble = createBackBubble({
 // ---------------------------------------------------------------------------
 
 function show(view) {
+  // Stand der Liste merken, bevor sie ausgeblendet wird (danach ist window.scrollY der der neuen Ansicht)
+  if (view !== 'home' && !$('view-home').hidden) listScroll = window.scrollY;
+  if (view === 'auth') listScroll = null;
   if (view !== 'reader') position.end(); // vor dem Ausblenden: danach lässt sich nichts mehr messen
   if (view !== 'reader') highlighter.reset();
   if (view !== 'reader') setReadingPanel(false);
@@ -698,7 +702,18 @@ function openList() {
   if (tagsStale) loadTags();
   else renderTags();
   if (!listLoaded) loadArticles(true);
-  else renderList();
+  else {
+    renderList();
+    restoreListScroll();
+  }
+}
+
+/** Stellt den gemerkten Scrollstand der Liste einmalig wieder her (nach dem Aufbau der Einträge). */
+function restoreListScroll() {
+  if (listScroll === null) return;
+  const y = listScroll;
+  listScroll = null;
+  window.scrollTo(0, y);
 }
 
 function filterActive() {
@@ -721,6 +736,7 @@ async function loadArticles(reset) {
     hasMore = page.length === PAGE_SIZE;
     listLoaded = true;
     renderList();
+    restoreListScroll(); // Rückkehr aus dem Lesemodus, wenn die Liste neu geladen werden musste
     if (reset) scheduleSync();
   } catch (error) {
     clearTimeout(slow);
